@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  color: #1f2937;
+  background: linear-gradient(to bottom, #ffffff, #fff1f2);
+}
+
+.container {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.card {
+  @apply rounded-2xl border border-gray-200 bg-white shadow-sm;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition;
+}
+
+.btn-primary {
+  @apply bg-rose-500 text-white hover:bg-rose-600;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-900 hover:bg-gray-200;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs;
+}
+
+.badge-green {
+  @apply bg-emerald-100 text-emerald-700;
+}
+
+.badge-gray {
+  @apply bg-gray-200 text-gray-700;
+}
