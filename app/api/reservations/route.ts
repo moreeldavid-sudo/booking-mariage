@@ -1,6 +1,6 @@
 // app/api/reservations/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebaseAdmin';
+import { getAdminDb } from '@/lib/firebaseAdmin';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Quantité invalide.' }, { status: 400 });
     }
 
+    const adminDb = getAdminDb();
     const docRef = adminDb.collection('lodgings').doc(lodgingId);
 
     let afterReserved = 0;
