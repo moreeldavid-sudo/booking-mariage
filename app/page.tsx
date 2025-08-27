@@ -1,32 +1,32 @@
-// app/page.tsx
-import Hero from "../components/Hero";
+import Image from "next/image";
 import LodgingList from "../components/LodgingList";
 
 export default function Page() {
   return (
-    <main className="container mx-auto px-6 py-6 space-y-8">
-      <Hero />
-
-      {/* Section infos optionnelle */}
-      <section id="infos" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="card p-4">
-          <h3 className="font-semibold mb-1">Lieu</h3>
-          <p className="text-sm text-gray-600">
-            Domaine du Bois – Accès fléché depuis la D12.
-          </p>
-        </div>
-        <div className="card p-4">
-          <h3 className="font-semibold mb-1">Arrivées</h3>
-          <p className="text-sm text-gray-600">À partir de 15h – Parking gratuit.</p>
-        </div>
-        <div className="card p-4">
-          <h3 className="font-semibold mb-1">Contact</h3>
-          <p className="text-sm text-gray-600">vanessa&david · merci ♥</p>
+    <main>
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="relative h-72 md:h-96">
+          <Image
+            src="/tipi.jpg"
+            alt="Hébergements"
+            fill
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <h1 className="text-white text-3xl md:text-5xl font-bold drop-shadow">
+              Réservations Hébergements
+            </h1>
+          </div>
         </div>
       </section>
 
-      {/* La liste d’hébergements */}
-      <LodgingList />
+      {/* Liste */}
+      <section className="container mx-auto p-6">
+        <LodgingList />
+      </section>
     </main>
   );
 }
