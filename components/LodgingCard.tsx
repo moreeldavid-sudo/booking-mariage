@@ -1,42 +1,29 @@
-"use client";
+// components/LodgingCard.tsx
+'use client';
 
-import React from "react";
+import type { Lodging } from '../lib/types';
 
-interface LodgingCardProps {
-  title: string;
-  note?: string;
-  totalUnits: number;
-  reservedUnits: number;
-  unitCapacity: number;
+export interface LodgingCardProps {
+  lodging: Lodging;
 }
 
-export default function LodgingCard({
-  title,
-  note,
-  totalUnits,
-  reservedUnits,
-  unitCapacity,
-}: LodgingCardProps) {
-  const available = totalUnits - reservedUnits;
-  const isFull = available <= 0;
-
+export default function LodgingCard({ lodging }: LodgingCardProps) {
   return (
-    <div
-      className={`border rounded-xl shadow-md p-4 ${
-        isFull ? "bg-gray-200 opacity-70" : "bg-white"
-      }`}
-    >
-      <h2 className="text-xl font-bold mb-2">{title}</h2>
-      {note && <p className="text-sm text-gray-600 mb-2">{note}</p>}
-      <p className="text-sm">
-        Capacité : <strong>{unitCapacity}</strong> pers.
+    <article className="card p-4">
+      <h3 className="font-semibold">{lodging.title}</h3>
+      <p className="text-sm text-gray-600 capitalize">{lodging.type}</p>
+
+      <p className="mt-2 text-sm">
+        Capacité: {lodging.unitCapacity} pers./unité — {lodging.totalUnits} unités
       </p>
-      <p className="text-sm">
-        Places disponibles :{" "}
-        <strong className={isFull ? "text-red-600" : "text-green-600"}>
-          {isFull ? "Complet" : available}
-        </strong>
-      </p>
-    </div>
+
+      {typeof lodging.reservedUnits === 'number' && (
+        <p className="mt-1 text-xs">
+          Réservées: {lodging.reservedUnits}
+        </p>
+      )}
+
+      {lodging.note && <p className="mt-2 text-xs">{lodging.note}</p>}
+    </article>
   );
 }
