@@ -32,11 +32,25 @@ export default function LodgingList(): JSX.Element {
   if (loading) return <p>Chargement…</p>;
   if (error) return <p className="text-red-600">Erreur : {error}</p>;
 
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
-        <LodgingCard key={item.id} lodging={item} />
-      ))}
-    </div>
-  );
-}
+ return (
+  <section id="lodgings" className="container mx-auto p-6">
+    <h2 className="text-2xl font-bold mb-6">Nos hébergements</h2>
+
+    {loading ? (
+      <p>Chargement…</p>
+    ) : error ? (
+      <p className="text-red-600">Erreur : {error}</p>
+    ) : (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <LodgingCard
+            key={item.id}
+            lodging={item}
+            onReserve={(l) => alert(`Réserver: ${l.title}`)}
+          />
+        ))}
+      </div>
+    )}
+  </section>
+);
+
