@@ -1,21 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../lib/firebase";
-import LodgingCard from "./LodgingCard";
+import { useEffect, useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import LodgingCard from './LodgingCard';
+import type { Lodging } from '../lib/types';
 
-type Lodging = {
-  id: string;
-  title: string;
-  note?: string;
-  totalUnits: number;
-  reservedUnits: number;
-  unitCapacity: number;
-  type: string;
-};
-
-export default function LodgingList() {
+export default function LodgingList(): JSX.Element {
   const [items, setItems] = useState<Lodging[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,14 +14,15 @@ export default function LodgingList() {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "lodgings"));
-        const data = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Lodging, "id">),
-        }));
+        const snap = await getDocs(collection(db, 'lodgings'));
+        const data: Lodging[] = snap.docs.map((d) => {
+          // on récupère les champs du doc et on ajoute l'id
+          const doc = d.data() as Omit<Lodging, 'id'>;
+          return { id: d.id, ...doc };
+        });
         setItems(data);
       } catch (e: any) {
-        setError(e?.message ?? "Erreur inconnue");
+        setError(e?.message ?? 'Erreur inconnue');
       } finally {
         setLoading(false);
       }
