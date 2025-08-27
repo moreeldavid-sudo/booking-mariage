@@ -1,5 +1,4 @@
-// components/LodgingCard.tsx
-import React from "react";
+import Image from "next/image";
 
 type Lodging = {
   id: string;
@@ -9,63 +8,49 @@ type Lodging = {
   reservedUnits: number;
   unitCapacity: number;
   type: string;
-  imageUrl?: string; // image optionnelle (URL Firestore) sinon on met /tipi.jpg
 };
 
-type Props = {
+type LodgingCardProps = {
   lodging: Lodging;
-  onReserve?: (lodging: Lodging) => void; // callback optionnel
 };
 
-export default function LodgingCard({ lodging, onReserve }: Props) {
-  const available =
-    Math.max(0, (lodging.totalUnits ?? 0) - (lodging.reservedUnits ?? 0));
-
-  const img = lodging.imageUrl && lodging.imageUrl.trim() !== ""
-    ? lodging.imageUrl
-    : "/tipi.jpg"; // fallback vers ton image publique
+export default function LodgingCard({ lodging }: LodgingCardProps) {
+  const available = Math.max(lodging.totalUnits - lodging.reservedUnits, 0);
 
   return (
-    <div className="card overflow-hidden">
-      <img
-        src={img}
-        alt={lodging.title}
-        className="w-full h-44 object-cover"
-        loading="lazy"
-      />
+    <article className="card overflow-hidden">
+      {/* Image */}
+      <div className="relative w-full h-44">
+        <Image
+          src="/tipi.jpg"
+          alt={lodging.title}
+          fill
+          className="object-cover"
+          priority
+        />
+      </div>
 
+      {/* Contenu */}
       <div className="p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-lg">{lodging.title}</h3>
-          <span
-            className={`badge ${
-              available > 0 ? "bg-green-100 text-green-700" : "bg-rose-100 text-rose-700"
-            }`}
-          >
-            {available > 0 ? `${available} dispo` : "Complet"}
+        <h3 className="text-lg font-semibold">{lodging.title}</h3>
+        {lodging.note ? (
+          <p className="text-sm text-gray-600">{lodging.note}</p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <span className="badge bg-gray-100 text-gray-700">{lodging.type}</span>
+          <span className="badge bg-emerald-100 text-emerald-700">
+            {available} / {lodging.totalUnits} dispo
+          </span>
+          <span className="badge bg-indigo-100 text-indigo-700">
+            {lodging.unitCapacity} pers/unité
           </span>
         </div>
 
-        {lodging.note && (
-          <p className="text-sm text-gray-600">{lodging.note}</p>
-        )}
-
-        <div className="flex items-center justify-between pt-1">
-          <p className="text-xs text-gray-500">
-            Capacité: {lodging.unitCapacity} pers • Total: {lodging.totalUnits}
-          </p>
-
-          <button
-            className={`btn-primary px-3 py-1 ${
-              available === 0 ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            onClick={() => available > 0 && onReserve?.(lodging)}
-            disabled={available === 0}
-          >
-            Voir / Réserver
-          </button>
-        </div>
+        <button className="btn-primary w-full mt-2">
+          Voir / Réserver
+        </button>
       </div>
-    </div>
+    </article>
   );
 }
