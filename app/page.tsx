@@ -3,6 +3,7 @@ import { getAdminDb } from '@/lib/firebaseAdmin';
 import LodgingList from '@/components/LodgingList';
 import Image from 'next/image';
 
+export const runtime = 'nodejs';
 export const revalidate = 0; // données live sans cache
 
 async function getLodgings() {
