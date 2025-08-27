@@ -1,5 +1,5 @@
 // app/page.tsx
-import { adminDb } from '@/lib/firebaseAdmin';
+import { getAdminDb } from '@/lib/firebaseAdmin';
 import LodgingList from '@/components/LodgingList';
 import Image from 'next/image';
 
