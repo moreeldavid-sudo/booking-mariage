@@ -14,3 +14,16 @@ h1, h2, h3 {
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
+/* --- Classes utilitaires personnalisées --- */
+.card {
+  @apply rounded-2xl bg-white shadow-sm border border-gray-100;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-lg text-white 
+         bg-rose-600 hover:bg-rose-700 transition px-4 py-2;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
