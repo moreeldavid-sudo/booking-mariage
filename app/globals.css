@@ -4,23 +4,29 @@
 
 body {
   font-family: sans-serif;
-  background-color: #f9fafb;
-  color: #111827;
   margin: 0;
   padding: 0;
+
+  /* 🌄 Fond avec photo domaine */
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.90)),
+    url("/domaine.jpg") center/cover no-repeat fixed;
+
+  color: #111827;
 }
 
 h1, h2, h3 {
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
+
 /* --- Classes utilitaires personnalisées --- */
 .card {
   @apply rounded-2xl bg-white shadow-sm border border-gray-100;
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center rounded-lg text-white 
+  @apply inline-flex items-center justify-center rounded-lg text-white
          bg-rose-600 hover:bg-rose-700 transition px-4 py-2;
 }
 
