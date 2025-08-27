@@ -3,12 +3,16 @@ import { getAdminDb } from '@/lib/firebaseAdmin';
 import LodgingList from '@/components/LodgingList';
 import Image from 'next/image';
 
-export const revalidate = 0; // données live (tu peux mettre 30 si tu veux un léger cache)
+export const revalidate = 0; // données live sans cache
 
 async function getLodgings() {
+  // 🔑 On initialise Firestore Admin ici
+  const adminDb = getAdminDb();
+
   const snap = await adminDb.collection('lodgings').get();
   const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  // option : tri par id pour un ordre stable
+
+  // Optionnel : tri pour ordre stable
   docs.sort((a: any, b: any) => (a.id > b.id ? 1 : -1));
   return docs;
 }
@@ -18,7 +22,7 @@ export default async function Page() {
 
   return (
     <main className="main-shell py-8">
-      {/* Hero minimal */}
+      {/* Hero */}
       <div className="relative mb-8 h-44 w-full overflow-hidden rounded-2xl ring-1 ring-black/5">
         <Image
           src="/domaine.jpg"
