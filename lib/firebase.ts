@@ -1,18 +1,29 @@
-// lib/firebase.ts
-import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+// lib/firebaseAdmin.ts
+import { App, cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-};
+let adminApp: App | null = null;
 
-// Évite d’initialiser Firebase plusieurs fois
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+export function getAdminDb() {
+  if (!adminApp) {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
 
-export const db = getFirestore(app);
+    // On n'initialise PAS pendant la build si les env ne sont pas injectées
+    if (!projectId || !clientEmail || !rawKey) {
+      throw new Error(
+        'Firebase Admin env manquantes. Vérifiez FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY.'
+      );
+    }
+
+    const privateKey = rawKey.replace(/\\n/g, '\n');
+
+    adminApp = getApps().length
+      ? getApps()[0]!
+      : initializeApp({
+          credential: cert({ projectId, clientEmail, privateKey }),
+        });
+  }
+  return getFirestore(adminApp);
+}
