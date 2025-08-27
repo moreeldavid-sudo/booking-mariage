@@ -1,4 +1,5 @@
 import Image from "next/image";
+import React from "react";
 
 type Lodging = {
   id: string;
@@ -15,16 +16,18 @@ type LodgingCardProps = {
 };
 
 export default function LodgingCard({ lodging }: LodgingCardProps) {
+  // Places encore disponibles (jamais < 0)
   const available = Math.max(lodging.totalUnits - lodging.reservedUnits, 0);
 
   return (
     <article className="card overflow-hidden">
       {/* Image */}
-      <div className="relative w-full h-44">
+      <div className="relative w-full aspect-[4/3]">
         <Image
           src="/tipi.jpg"
           alt={lodging.title}
           fill
+          sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw"
           className="object-cover"
           priority
         />
@@ -33,6 +36,7 @@ export default function LodgingCard({ lodging }: LodgingCardProps) {
       {/* Contenu */}
       <div className="p-4 space-y-2">
         <h3 className="text-lg font-semibold">{lodging.title}</h3>
+
         {lodging.note ? (
           <p className="text-sm text-gray-600">{lodging.note}</p>
         ) : null}
@@ -46,10 +50,13 @@ export default function LodgingCard({ lodging }: LodgingCardProps) {
             {lodging.unitCapacity} pers/unité
           </span>
         </div>
+      </div>
 
-        <button className="btn-primary w-full mt-2">
+      <div className="p-4 pt-0">
+        {/* TODO: remplace href par ta vraie page de réservation plus tard */}
+        <a href="#" className="btn-primary w-full inline-flex justify-center">
           Voir / Réserver
-        </button>
+        </a>
       </div>
     </article>
   );
