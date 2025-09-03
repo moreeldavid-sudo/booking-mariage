@@ -1,29 +1,17 @@
-// lib/firebaseAdmin.ts
-import { App, cert, getApps, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import admin from "firebase-admin";
 
-let adminApp: App | null = null;
+const projectId = process.env.FB_PROJECT_ID;
+const clientEmail = process.env.FB_CLIENT_EMAIL;
+const privateKey = process.env.FB_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-export function getAdminDb() {
-  if (!adminApp) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
-
-    // On n'initialise PAS pendant la build si les env ne sont pas injectées
-    if (!projectId || !clientEmail || !rawKey) {
-      throw new Error(
-        'Firebase Admin env manquantes. Vérifiez FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY.'
-      );
-    }
-
-    const privateKey = rawKey.replace(/\\n/g, '\n');
-
-    adminApp = getApps().length
-      ? getApps()[0]!
-      : initializeApp({
-          credential: cert({ projectId, clientEmail, privateKey }),
-        });
-  }
-  return getFirestore(adminApp);
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+  });
 }
+
+export const adminDb = admin.firestore();
