@@ -1,18 +1,11 @@
 // lib/firebaseAdmin.ts
 import admin from "firebase-admin";
 
-/**
- * On lit des variables "safe" (contournement Vercel) :
- *  - FB_PROJECT_ID
- *  - FB_CLIENT_EMAIL
- *  - FB_PRIVATE_KEY  (multi-ligne OU échappée avec \n)
- */
 const projectId = process.env.FB_PROJECT_ID;
 const clientEmail = process.env.FB_CLIENT_EMAIL;
 let privateKey = process.env.FB_PRIVATE_KEY || "";
 
-// Supporte à la fois la clé collée en multilignes et la version "échappée" avec \n
-// (si la clé contient des "\n", on les remplace par de vrais sauts de ligne)
+// Corrige la version échappée avec \n si nécessaire
 if (privateKey && privateKey.includes("\\n")) {
   privateKey = privateKey.replace(/\\n/g, "\n");
 }
@@ -24,9 +17,7 @@ function assertEnv() {
   if (!privateKey) missing.push("FB_PRIVATE_KEY");
   if (missing.length) {
     throw new Error(
-      `Firebase Admin env manquantes: ${missing.join(
-        " / "
-      )} (vérifie Vercel → Settings → Environment Variables)`
+      `Firebase Admin env manquantes: ${missing.join(" / ")}`
     );
   }
 }
@@ -51,5 +42,4 @@ export function getAdminDb() {
   return _db;
 }
 
-// Export utilitaire compatible avec tes imports existants
 export const adminDb = getAdminDb();
