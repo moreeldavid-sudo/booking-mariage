@@ -3,23 +3,25 @@ import { getAdminDb } from '@/lib/firebaseAdmin';
 import LodgingList from '@/components/LodgingList';
 import Image from 'next/image';
 
-export const runtime = 'nodejs';
-export const revalidate = 0; // données live sans cache
+export const runtime = 'nodejs';       // ← force Node runtime
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 async function getLodgings() {
-  // 🔑 On initialise Firestore Admin ici
-  const adminDb = getAdminDb();
-
-  const snap = await adminDb.collection('lodgings').get();
+  const db = getAdminDb();
+  const snap = await db.collection('lodgings').get();
   const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-
-  // Optionnel : tri pour ordre stable
   docs.sort((a: any, b: any) => (a.id > b.id ? 1 : -1));
   return docs;
 }
 
 export default async function Page() {
-  const lodgings = await getLodgings();
+  let lodgings: any[] = [];
+  try {
+    lodgings = await getLodgings();
+  } catch (e) {
+    console.error('getLodgings error:', e);
+  }
 
   return (
     <main className="main-shell py-8">
@@ -41,7 +43,13 @@ export default async function Page() {
 
       {/* Liste */}
       <section className="container mx-auto p-6">
-        <LodgingList lodgings={lodgings} />
+        {lodgings.length > 0 ? (
+          <LodgingList lodgings={lodgings} />
+        ) : (
+          <p className="text-gray-600">
+            Chargement des hébergements… (si ça ne s’affiche pas, vérifier la configuration serveur)
+          </p>
+        )}
       </section>
     </main>
   );
