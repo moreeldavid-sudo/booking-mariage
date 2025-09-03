@@ -1,7 +1,10 @@
 // app/api/reservations/route.ts
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebaseAdmin';
 import crypto from 'crypto';
+
 
 export async function POST(req: NextRequest) {
   try {
