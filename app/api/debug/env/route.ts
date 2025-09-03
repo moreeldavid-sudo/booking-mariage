@@ -1,10 +1,16 @@
-import { NextResponse } from 'next/server';
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+// app/api/debug/env/route.ts
+import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
+
 export async function GET() {
-  const keys = ['FIREBASE_PROJECT_ID','FIREBASE_CLIENT_EMAIL','FIREBASE_PRIVATE_KEY','NEXT_PUBLIC_BASE_URL'];
-  const out = Object.fromEntries(keys.map(k =>
-    [k, process.env[k] ? (k==='FIREBASE_PRIVATE_KEY'?'present':process.env[k]) : 'MISSING']
-  ));
-  return NextResponse.json({ ok: true, env: out });
+  return NextResponse.json({
+    ok: true,
+    env: {
+      FB_PROJECT_ID: process.env.FB_PROJECT_ID ? "present" : "MISSING",
+      FB_CLIENT_EMAIL: process.env.FB_CLIENT_EMAIL ? "present" : "MISSING",
+      FB_PRIVATE_KEY: process.env.FB_PRIVATE_KEY ? "present" : "MISSING",
+      SITE_BASE_URL: process.env.SITE_BASE_URL ? "present" : "MISSING",
+    },
+  });
 }
