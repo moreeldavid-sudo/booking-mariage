@@ -1,33 +1,42 @@
 // lib/firebaseAdmin.ts
-import { App, cert, getApps, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import admin from 'firebase-admin';
 
-let adminApp: App | null = null;
+let _db: admin.firestore.Firestore | null = null;
 
-/**
- * Retourne une instance Firestore Admin.
- * Initialisation "lazy" pour éviter l'init pendant la build Vercel.
- */
 export function getAdminDb() {
-  if (!adminApp) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+  if (_db) return _db;
 
-    if (!projectId || !clientEmail || !rawKey) {
-      throw new Error(
-        'Firebase Admin env manquantes: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY'
-      );
-    }
+  // --- Lis les variables d'environnement (noms FB_ comme tu as choisi) ---
+  const projectId  = process.env.FB_PROJECT_ID;
+  const clientEmail = process.env.FB_CLIENT_EMAIL;
+  let privateKey   = process.env.FB_PRIVATE_KEY || '';
 
-    const privateKey = rawKey.replace(/\\n/g, '\n');
-
-    adminApp = getApps().length
-      ? getApps()[0]!
-      : initializeApp({
-          credential: cert({ projectId, clientEmail, privateKey }),
-        });
+  // Accepte la clé privée au format "échappé" (\n) ou multilignes
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
   }
 
-  return getFirestore(adminApp);
+  const missing: string[] = [];
+  if (!projectId)   missing.push('FB_PROJECT_ID');
+  if (!clientEmail) missing.push('FB_CLIENT_EMAIL');
+  if (!privateKey)  missing.push('FB_PRIVATE_KEY');
+
+  if (missing.length) {
+    throw new Error(
+      `Firebase Admin env manquantes: ${missing.join(' / ')}`
+    );
+  }
+
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    });
+  }
+
+  _db = admin.firestore();
+  return _db;
 }
