@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       tx.update(docRef, { reservedUnits: afterReserved });
     });
 
-    // Log de la réservation + token d’annulation
+    // Log réservation
     const reservationRef = await adminDb.collection('reservations').add({
       lodgingId,
       qty,
@@ -54,20 +54,22 @@ export async function POST(req: NextRequest) {
       (await reservationRef.get()).data()!.cancelToken
     )}`;
 
-    // --- Emails via EmailJS (admin + client) ---
+    // --- EmailJS (admin + client) ---
     const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
     const common = {
       service_id: process.env.EMAILJS_SERVICE_ID,
       template_id: process.env.EMAILJS_TEMPLATE_ID,
       user_id: process.env.EMAILJS_PUBLIC_KEY,
+      // ⚠️ Mode strict EmailJS : on ajoute aussi le token dans le body
+      accessToken: process.env.EMAILJS_PRIVATE_KEY,
     } as const;
 
     const headers = {
       'Content-Type': 'application/json',
+      // ⚠️ Mode strict EmailJS : on passe aussi la clé dans l'entête
       Authorization: `Bearer ${process.env.EMAILJS_PRIVATE_KEY}`,
     };
 
-    // Admin
     const payloadAdmin = {
       ...common,
       template_params: {
@@ -80,7 +82,6 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Client
     const payloadClient = {
       ...common,
       template_params: {
@@ -94,16 +95,8 @@ export async function POST(req: NextRequest) {
     };
 
     const [r1, r2] = await Promise.all([
-      fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payloadAdmin),
-      }),
-      fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payloadClient),
-      }),
+      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadAdmin) }),
+      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadClient) }),
     ]);
 
     if (!r1.ok) console.error('EmailJS admin error:', await r1.text());
