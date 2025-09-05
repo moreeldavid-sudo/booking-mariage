@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     });
 
-    const base = process.env.NEXT_PUBLIC_BASE_URL || '';
+    const base = process.env.SITE_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
     const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(
       (await reservationRef.get()).data()!.cancelToken
     )}`;
