@@ -8,24 +8,20 @@ export const metadata: Metadata = {
   description: "Plateforme de réservation pour le mariage",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="relative min-h-screen">
         {/* Image de fond */}
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-10 -z-10"
+          className="fixed inset-0 bg-cover bg-center opacity-30 -z-20"
           style={{ backgroundImage: "url('/Domaine.jpg')" }}
         />
+        {/* Voile blanc léger pour lisibilité */}
+        <div className="fixed inset-0 bg-white/30 -z-10" />
         
-        {/* Contenu du site */}
-        <div className="relative z-10">
-          {children}
-        </div>
+        {/* Contenu */}
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );
