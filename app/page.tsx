@@ -1,5 +1,5 @@
 // app/page.tsx
-import getAdminDb from "@/lib/firebaseAdmin";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import LodgingList from "@/components/LodgingList";
 
 export const runtime = "nodejs";
