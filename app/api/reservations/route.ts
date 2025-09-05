@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebaseAdmin';
 import crypto from 'crypto';
 
-
 export async function POST(req: NextRequest) {
   try {
     const { lodgingId, quantity, name, email } = await req.json();
@@ -49,7 +48,8 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     });
 
-    const base = process.env.SITE_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
+    const base =
+      process.env.SITE_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
     const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(
       (await reservationRef.get()).data()!.cancelToken
     )}`;
@@ -61,6 +61,11 @@ export async function POST(req: NextRequest) {
       template_id: process.env.EMAILJS_TEMPLATE_ID,
       user_id: process.env.EMAILJS_PUBLIC_KEY,
     } as const;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.EMAILJS_PRIVATE_KEY}`,
+    };
 
     // Admin
     const payloadAdmin = {
@@ -91,12 +96,12 @@ export async function POST(req: NextRequest) {
     const [r1, r2] = await Promise.all([
       fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payloadAdmin),
       }),
       fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payloadClient),
       }),
     ]);
