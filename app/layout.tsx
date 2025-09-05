@@ -2,7 +2,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "Réservations Hébergements",
@@ -16,17 +15,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body>
-        <header className="p-4">
-          <Image
-            src="/Domaine.jpg"
-            alt="Logo Domaine"
-            width={150}
-            height={80}
-            priority
-          />
-        </header>
-        {children}
+      <body className="relative min-h-screen">
+        {/* Image de fond */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-10 -z-10"
+          style={{ backgroundImage: "url('/Domaine.jpg')" }}
+        />
+        
+        {/* Contenu du site */}
+        <div className="relative z-10">
+          {children}
+        </div>
       </body>
     </html>
   );
