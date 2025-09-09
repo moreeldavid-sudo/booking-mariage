@@ -54,24 +54,21 @@ export async function POST(req: NextRequest) {
       (await reservationRef.get()).data()!.cancelToken
     )}`;
 
-    // --- EmailJS (admin + client) ---
+    // --- Emails via EmailJS (admin + client) ---
     const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
     const common = {
       service_id: process.env.EMAILJS_SERVICE_ID,
-      template_id: process.env.EMAILJS_TEMPLATE_ID,
       user_id: process.env.EMAILJS_PUBLIC_KEY,
-      // ⚠️ Mode strict EmailJS : on ajoute aussi le token dans le body
-      accessToken: process.env.EMAILJS_PRIVATE_KEY,
     } as const;
 
-    const headers = {
-      'Content-Type': 'application/json',
-      // ⚠️ Mode strict EmailJS : on passe aussi la clé dans l'entête
-      Authorization: `Bearer ${process.env.EMAILJS_PRIVATE_KEY}`,
-    };
+    const templateIdClient = process.env.EMAILJS_TEMPLATE_ID;
+    const templateIdAdmin =
+      process.env.EMAILJS_TEMPLATE_ID_ADMIN || templateIdClient;
 
+    // Admin
     const payloadAdmin = {
       ...common,
+      template_id: templateIdAdmin,
       template_params: {
         to_email: process.env.RESERVATION_ADMIN_EMAIL,
         customer_name: name,
@@ -82,8 +79,10 @@ export async function POST(req: NextRequest) {
       },
     };
 
+    // Client
     const payloadClient = {
       ...common,
+      template_id: templateIdClient,
       template_params: {
         to_email: email,
         customer_name: name,
@@ -95,14 +94,29 @@ export async function POST(req: NextRequest) {
     };
 
     const [r1, r2] = await Promise.all([
-      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadAdmin) }),
-      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadClient) }),
+      fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EMAILJS_PRIVATE_KEY}`,
+        },
+        body: JSON.stringify(payloadAdmin),
+      }),
+      fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EMAILJS_PRIVATE_KEY}`,
+        },
+        body: JSON.stringify(payloadClient),
+      }),
     ]);
 
     if (!r1.ok) console.error('EmailJS admin error:', await r1.text());
     if (!r2.ok) console.error('EmailJS client error:', await r2.text());
 
     return NextResponse.json({ ok: true, reservedUnits: afterReserved });
+
   } catch (e: any) {
     console.error(e);
     const msg = e?.message ?? 'Erreur serveur';
