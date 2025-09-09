@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     const { lodgingId, quantity, name, email } = await req.json();
 
-    // 1) Validations simples
+    // 1) Validations
     if (!lodgingId || !quantity || !name || !email) {
       return NextResponse.json({ error: 'Champs manquants.' }, { status: 400 });
     }
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Quantité invalide.' }, { status: 400 });
     }
 
-    // 2) Réservation transactionnelle
+    // 2) Transaction: décrémenter les dispos
     const db = getAdminDb();
     const lodgingRef = db.collection('lodgings').doc(lodgingId);
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // 3) Log de la réservation
+    // 3) Enregistrer la réservation
     const reservationRef = await db.collection('reservations').add({
       lodgingId,
       qty,
@@ -54,18 +54,47 @@ export async function POST(req: NextRequest) {
     const cancelToken = (await reservationRef.get()).data()!.cancelToken as string;
     const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`;
 
-    // 5) Envoi emails via EmailJS (mode non-strict, sans Authorization)
+    // 5) Phrase lisible & nom convivial
+    function humanizeLodging(id: string, q: number) {
+      let friendlyName = id;
+      let bedsPhrase = '';
+      if (id === 'tipis-lit140') {
+        friendlyName = 'Tipi lit 140';
+        bedsPhrase = '1 lit de 140';
+      } else if (id === 'tipis-lits90') {
+        friendlyName = 'Tipi 2 lits 90';
+        bedsPhrase = '2 lits de 90';
+      }
+      const tipiWord = q > 1 ? 'tipis' : 'tipi';
+      const persons = q * 2;
+      const personsWord = persons > 1 ? 'personnes' : 'personne';
+      const summaryLine = `${q} ${tipiWord} pour ${persons} ${personsWord} avec ${bedsPhrase}`;
+      return { friendlyName, summaryLine };
+    }
+
+    // Essayer de lire le "name" de Firestore si présent
+    let lodgingName = '';
+    try {
+      const readSnap = await lodgingRef.get();
+      lodgingName = (readSnap.data() as any)?.name || '';
+    } catch {/* ignore */}
+
+    const { friendlyName, summaryLine } = humanizeLodging(lodgingId, qty);
+    const lodgingDisplay = lodgingName || friendlyName;
+
+    // 6) Envoi emails via EmailJS (mode non-strict, sans Authorization)
     const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
+    const headers = { 'Content-Type': 'application/json' };
+
+    const templateIdClient = process.env.EMAILJS_TEMPLATE_ID;
+    const templateIdAdmin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || templateIdClient;
 
     const common = {
       service_id: process.env.EMAILJS_SERVICE_ID,
       user_id: process.env.EMAILJS_PUBLIC_KEY,
     } as const;
 
-    const templateIdClient = process.env.EMAILJS_TEMPLATE_ID;
-    const templateIdAdmin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || templateIdClient;
-
-    // Payloads
+    // Admin
     const payloadAdmin = {
       ...common,
       template_id: templateIdAdmin,
@@ -74,11 +103,14 @@ export async function POST(req: NextRequest) {
         customer_name: name,
         customer_email: email,
         lodging_id: lodgingId,
+        lodging_name: lodgingDisplay,   // ← lisible
         quantity: qty,
+        summary_line: summaryLine,      // ← phrase prête : "1 tipi pour 2 personnes..."
         cancel_url: cancelUrl,
       },
     };
 
+    // Client
     const payloadClient = {
       ...common,
       template_id: templateIdClient,
@@ -87,12 +119,12 @@ export async function POST(req: NextRequest) {
         customer_name: name,
         customer_email: email,
         lodging_id: lodgingId,
+        lodging_name: lodgingDisplay,
         quantity: qty,
+        summary_line: summaryLine,
         cancel_url: cancelUrl,
       },
     };
-
-    const headers = { 'Content-Type': 'application/json' };
 
     const [r1, r2] = await Promise.all([
       fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadAdmin) }),
