@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`;
 
     // 5) Phrase lisible & nom convivial
-    function humanizeLodging(id: string, q: number) {
+    const humanizeLodging = (id: string, q: number) => {
       let friendlyName = id;
       let bedsPhrase = '';
       if (id === 'tipis-lit140') {
@@ -70,14 +70,16 @@ export async function POST(req: NextRequest) {
       const personsWord = persons > 1 ? 'personnes' : 'personne';
       const summaryLine = `${q} ${tipiWord} pour ${persons} ${personsWord} avec ${bedsPhrase}`;
       return { friendlyName, summaryLine };
-    }
+    };
 
     // Essayer de lire le "name" de Firestore si présent
     let lodgingName = '';
     try {
       const readSnap = await lodgingRef.get();
       lodgingName = (readSnap.data() as any)?.name || '';
-    } catch {/* ignore */}
+    } catch {
+      /* ignore */
+    }
 
     const { friendlyName, summaryLine } = humanizeLodging(lodgingId, qty);
     const lodgingDisplay = lodgingName || friendlyName;
@@ -103,9 +105,9 @@ export async function POST(req: NextRequest) {
         customer_name: name,
         customer_email: email,
         lodging_id: lodgingId,
-        lodging_name: lodgingDisplay,   // ← lisible
+        lodging_name: lodgingDisplay,   // lisible
         quantity: qty,
-        summary_line: summaryLine,      // ← phrase prête : "1 tipi pour 2 personnes..."
+        summary_line: summaryLine,      // "1 tipi pour 2 personnes…"
         cancel_url: cancelUrl,
       },
     };
