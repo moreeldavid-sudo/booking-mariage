@@ -1,4 +1,4 @@
-import LodgingCard from './LodgingCard';
+import LodgingCardMin from "./LodgingCard.min";
 
 export default function LodgingList({ lodgings }: { lodgings: any[] }) {
   return (
