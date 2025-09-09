@@ -30,31 +30,46 @@ export async function POST(req: NextRequest) {
       const snap = await tx.get(lodgingRef);
       if (!snap.exists) throw new Error('Hébergement introuvable.');
       const data = snap.data() as any;
-      const total: number = data.totalUnits ?? 0;
+      const totalUnits: number = data.totalUnits ?? 0;
       const reserved: number = data.reservedUnits ?? 0;
-      const remaining = total - reserved;
+      const remaining = totalUnits - reserved;
       if (qty > remaining) throw new Error(`Plus que ${remaining} disponibilité(s).`);
       afterReserved = reserved + qty;
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // 3) Enregistrer la réservation
+    // 3) Relire les infos du lodging (nom + prix)
+    const lodgingSnap = await lodgingRef.get();
+    const lodgingData = lodgingSnap.data() as any;
+
+    // Prix par tipi depuis Firestore si présent, sinon fallback simple
+    const unitPriceCHF: number =
+      typeof lodgingData?.priceCHF === 'number'
+        ? lodgingData.priceCHF
+        : (lodgingId === 'tipis-lit140' || lodgingId === 'tipis-lits90' ? 120 : 120); // ajuste ici si besoin
+
+    const totalCHF = unitPriceCHF * qty;
+
+    // 4) Enregistrer la réservation (on stocke aussi les montants)
     const reservationRef = await db.collection('reservations').add({
       lodgingId,
       qty,
       name,
       email,
+      unitPriceCHF,
+      totalCHF,
       status: 'confirmed',
       cancelToken: crypto.randomUUID(),
       createdAt: new Date(),
+      paymentStatus: 'pending', // à encaisser
     });
 
-    // 4) Lien d’annulation
+    // 5) Lien d’annulation
     const base = process.env.SITE_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
     const cancelToken = (await reservationRef.get()).data()!.cancelToken as string;
     const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`;
 
-    // 5) Phrase lisible & nom convivial
+    // 6) Texte lisible + formatage
     const humanizeLodging = (id: string, q: number) => {
       let friendlyName = id;
       let bedsPhrase = '';
@@ -72,19 +87,21 @@ export async function POST(req: NextRequest) {
       return { friendlyName, summaryLine };
     };
 
-    // Essayer de lire le "name" de Firestore si présent
-    let lodgingName = '';
-    try {
-      const readSnap = await lodgingRef.get();
-      lodgingName = (readSnap.data() as any)?.name || '';
-    } catch {
-      /* ignore */
-    }
+    const formatCHF = (n: number) =>
+      new Intl.NumberFormat('fr-CH', { style: 'currency', currency: 'CHF' }).format(n);
 
     const { friendlyName, summaryLine } = humanizeLodging(lodgingId, qty);
-    const lodgingDisplay = lodgingName || friendlyName;
+    const lodgingDisplay = lodgingData?.name || friendlyName;
+    const totalCHFFormatted = formatCHF(totalCHF);
+    const unitCHFFormatted = formatCHF(unitPriceCHF);
 
-    // 6) Envoi emails via EmailJS (mode non-strict, sans Authorization)
+    // Instructions paiement (tu peux personnaliser le numéro TWINT si besoin)
+    const paymentInstructions = [
+      `Montant à payer : ${totalCHFFormatted} (${unitCHFFormatted} / tipi x ${qty})`,
+      `Paiement par TWINT (au numéro communiqué sur place) ou en espèces à l'arrivée au Domaine.`,
+    ].join('\n');
+
+    // 7) Envoi emails via EmailJS (mode non-strict, sans Authorization)
     const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
     const headers = { 'Content-Type': 'application/json' };
 
@@ -105,9 +122,12 @@ export async function POST(req: NextRequest) {
         customer_name: name,
         customer_email: email,
         lodging_id: lodgingId,
-        lodging_name: lodgingDisplay,   // lisible
+        lodging_name: lodgingDisplay,
         quantity: qty,
-        summary_line: summaryLine,      // "1 tipi pour 2 personnes…"
+        summary_line: summaryLine,
+        unit_price_chf: unitCHFFormatted,
+        total_chf: totalCHFFormatted,
+        payment_instructions: paymentInstructions,
         cancel_url: cancelUrl,
       },
     };
@@ -124,6 +144,9 @@ export async function POST(req: NextRequest) {
         lodging_name: lodgingDisplay,
         quantity: qty,
         summary_line: summaryLine,
+        unit_price_chf: unitCHFFormatted,
+        total_chf: totalCHFFormatted,
+        payment_instructions: paymentInstructions,
         cancel_url: cancelUrl,
       },
     };
