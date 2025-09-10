@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from "@/lib/constants";
+import { PRICE_PER_TIPI_TOTAL, STAY_LABEL, TWINT_PHONE_E164 } from "@/lib/constants";
 
 type Props = {
   open: boolean;
@@ -14,6 +14,7 @@ export default function ReserveModal({ open, onClose, lodging }: Props) {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
   const [reservation, setReservation] = useState<{ id: string; total: number } | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const total = qty * PRICE_PER_TIPI_TOTAL;
   if (!open) return null;
@@ -40,6 +41,17 @@ export default function ReserveModal({ open, onClose, lodging }: Props) {
       setLoading(false);
     }
   }
+
+  async function copy(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {}
+  }
+
+  const refText = reservation ? `Resa ${reservation.id}` : "";
+  const phoneDisplay = "+41 78 902 87 58"; // affichage lisible
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -83,16 +95,48 @@ export default function ReserveModal({ open, onClose, lodging }: Props) {
               Montant: <strong>{reservation.total} CHF</strong> — {STAY_LABEL}
             </p>
 
-            <div className="mt-4 space-y-2 text-sm">
-              <p className="text-gray-700">Paiement par TWINT recommandé (ou cash à l’arrivée).</p>
-              <img
-                alt="QR TWINT"
-                className="mx-auto rounded-lg border"
-                src={`/api/qr?amount=${reservation.total}&ref=${encodeURIComponent("Resa " + reservation.id)}`}
-              />
-              <p className="text-gray-500 text-xs">
-                Scannez ce QR avec l’app. Référence : Resa {reservation.id}.
-              </p>
+            {/* Bloc paiement TWINT – instructions + boutons copier */}
+            <div className="mt-4 space-y-3 text-sm">
+              <p className="text-gray-700">Paiement par TWINT (recommandé) ou en espèces à l’arrivée.</p>
+
+              <div className="rounded-xl border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-28 text-xs text-gray-500">Numéro</div>
+                  <div className="font-medium">{phoneDisplay}</div>
+                  <button
+                    onClick={() => copy(TWINT_PHONE_E164, "phone")}
+                    className="ml-auto rounded-lg border px-2 py-1 text-xs"
+                  >
+                    {copied === "phone" ? "Copié ✓" : "Copier"}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-28 text-xs text-gray-500">Montant</div>
+                  <div className="font-medium">{reservation.total} CHF</div>
+                  <button
+                    onClick={() => copy(String(reservation.total), "amount")}
+                    className="ml-auto rounded-lg border px-2 py-1 text-xs"
+                  >
+                    {copied === "amount" ? "Copié ✓" : "Copier"}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-28 text-xs text-gray-500">Référence</div>
+                  <div className="font-medium break-all">{refText}</div>
+                  <button
+                    onClick={() => copy(refText, "ref")}
+                    className="ml-auto rounded-lg border px-2 py-1 text-xs"
+                  >
+                    {copied === "ref" ? "Copié ✓" : "Copier"}
+                  </button>
+                </div>
+              </div>
+
+              <ol className="list-decimal list-inside text-xs text-gray-600 space-y-1">
+                <li>Ouvrez l’app TWINT.</li>
+                <li>Choisissez <em>Envoyer de l’argent</em>.</li>
+                <li>Collez le numéro, entrez le montant, ajoutez la référence.</li>
+              </ol>
             </div>
 
             <div className="mt-4">
