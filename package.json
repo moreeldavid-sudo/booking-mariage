@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "firebase": "^10.12.0",
     "firebase-admin": "^12.5.0",
     "next": "14.2.5",
