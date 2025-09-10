@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebaseAdmin';
+import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from '@/lib/constants';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -26,143 +27,119 @@ export async function POST(req: NextRequest) {
     const lodgingRef = db.collection('lodgings').doc(lodgingId);
 
     let afterReserved = 0;
+    let lodgingData: any = null;
+
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(lodgingRef);
       if (!snap.exists) throw new Error('Hébergement introuvable.');
       const data = snap.data() as any;
+      lodgingData = data;
+
       const totalUnits: number = data.totalUnits ?? 0;
       const reserved: number = data.reservedUnits ?? 0;
       const remaining = totalUnits - reserved;
       if (qty > remaining) throw new Error(`Plus que ${remaining} disponibilité(s).`);
+
       afterReserved = reserved + qty;
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // 3) Relire les infos du lodging (nom + prix)
-    const lodgingSnap = await lodgingRef.get();
-    const lodgingData = lodgingSnap.data() as any;
-
-    // Prix par tipi depuis Firestore si présent, sinon fallback simple
-    const unitPriceCHF: number =
-      typeof lodgingData?.priceCHF === 'number'
-        ? lodgingData.priceCHF
-        : (lodgingId === 'tipis-lit140' || lodgingId === 'tipis-lits90' ? 120 : 120); // ajuste ici si besoin
-
+    // 3) Prix fixe pour tout le séjour
+    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF par tipi, séjour complet
     const totalCHF = unitPriceCHF * qty;
 
-    // 4) Enregistrer la réservation (on stocke aussi les montants)
+    // 4) Enregistrer la réservation
     const reservationRef = await db.collection('reservations').add({
       lodgingId,
+      lodgingName: lodgingData?.name ?? lodgingId,
       qty,
       name,
       email,
       unitPriceCHF,
       totalCHF,
+      stayLabel: STAY_LABEL,
       status: 'confirmed',
+      paymentStatus: 'pending', // à encaisser
       cancelToken: crypto.randomUUID(),
       createdAt: new Date(),
-      paymentStatus: 'pending', // à encaisser
     });
 
-    // 5) Lien d’annulation
-    const base = process.env.SITE_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
+    const reservationId = reservationRef.id;
+
+    // 5) URLs utiles (annulation + QR)
+    const base =
+      process.env.SITE_BASE_URL ||
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      '';
     const cancelToken = (await reservationRef.get()).data()!.cancelToken as string;
-    const cancelUrl = `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`;
+    const cancelUrl = base ? `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}` : '';
+    const qrUrl = base
+      ? `${base}/api/qr?amount=${totalCHF}&ref=${encodeURIComponent('Resa ' + reservationId)}`
+      : '';
 
-    // 6) Texte lisible + formatage
-    const humanizeLodging = (id: string, q: number) => {
-      let friendlyName = id;
-      let bedsPhrase = '';
-      if (id === 'tipis-lit140') {
-        friendlyName = 'Tipi lit 140';
-        bedsPhrase = '1 lit de 140';
-      } else if (id === 'tipis-lits90') {
-        friendlyName = 'Tipi 2 lits 90';
-        bedsPhrase = '2 lits de 90';
-      }
-      const tipiWord = q > 1 ? 'tipis' : 'tipi';
-      const persons = q * 2;
-      const personsWord = persons > 1 ? 'personnes' : 'personne';
-      const summaryLine = `${q} ${tipiWord} pour ${persons} ${personsWord} avec ${bedsPhrase}`;
-      return { friendlyName, summaryLine };
-    };
-
+    // 6) Texte lisible
     const formatCHF = (n: number) =>
       new Intl.NumberFormat('fr-CH', { style: 'currency', currency: 'CHF' }).format(n);
 
-    const { friendlyName, summaryLine } = humanizeLodging(lodgingId, qty);
-    const lodgingDisplay = lodgingData?.name || friendlyName;
     const totalCHFFormatted = formatCHF(totalCHF);
     const unitCHFFormatted = formatCHF(unitPriceCHF);
 
-    // Instructions paiement (tu peux personnaliser le numéro TWINT si besoin)
     const paymentInstructions = [
-      `Montant à payer : ${totalCHFFormatted} (${unitCHFFormatted} / tipi x ${qty})`,
-      `Paiement par TWINT (au numéro communiqué sur place) ou en espèces à l'arrivée au Domaine.`,
+      `Montant à payer : ${totalCHFFormatted} (${unitCHFFormatted} / tipi × ${qty})`,
+      `Paiement par TWINT au numéro +41 78 902 87 58 (ou en espèces à l'arrivée).`,
+      `Référence à indiquer : Resa ${reservationId}`,
     ].join('\n');
 
-    // 7) Envoi emails via EmailJS (mode non-strict, sans Authorization)
+    // 7) Emails via EmailJS (mêmes variables + nouvelles : stay_label, qr_url, reservation_id)
     const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
     const headers = { 'Content-Type': 'application/json' };
-
     const templateIdClient = process.env.EMAILJS_TEMPLATE_ID;
     const templateIdAdmin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || templateIdClient;
-
     const common = {
       service_id: process.env.EMAILJS_SERVICE_ID,
       user_id: process.env.EMAILJS_PUBLIC_KEY,
     } as const;
 
+    const templateParams = {
+      to_email: '',                  // sera fourni par chaque payload
+      customer_name: name,
+      customer_email: email,
+      lodging_id: lodgingId,
+      lodging_name: lodgingData?.name ?? lodgingId,
+      quantity: qty,
+      unit_price_chf: unitCHFFormatted,
+      total_chf: totalCHFFormatted,
+      stay_label: STAY_LABEL,        // << nouveau
+      payment_instructions: paymentInstructions,
+      cancel_url: cancelUrl,
+      reservation_id: reservationId, // << nouveau
+      qr_url: qrUrl,                 // << nouveau
+    };
+
     // Admin
     const payloadAdmin = {
       ...common,
       template_id: templateIdAdmin,
-      template_params: {
-        to_email: process.env.RESERVATION_ADMIN_EMAIL,
-        customer_name: name,
-        customer_email: email,
-        lodging_id: lodgingId,
-        lodging_name: lodgingDisplay,
-        quantity: qty,
-        summary_line: summaryLine,
-        unit_price_chf: unitCHFFormatted,
-        total_chf: totalCHFFormatted,
-        payment_instructions: paymentInstructions,
-        cancel_url: cancelUrl,
-      },
+      template_params: { ...templateParams, to_email: process.env.RESERVATION_ADMIN_EMAIL || '' },
     };
 
     // Client
     const payloadClient = {
       ...common,
       template_id: templateIdClient,
-      template_params: {
-        to_email: email,
-        customer_name: name,
-        customer_email: email,
-        lodging_id: lodgingId,
-        lodging_name: lodgingDisplay,
-        quantity: qty,
-        summary_line: summaryLine,
-        unit_price_chf: unitCHFFormatted,
-        total_chf: totalCHFFormatted,
-        payment_instructions: paymentInstructions,
-        cancel_url: cancelUrl,
-      },
+      template_params: { ...templateParams, to_email: email },
     };
 
     const [r1, r2] = await Promise.all([
       fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadAdmin) }),
       fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadClient) }),
     ]);
-
     if (!r1.ok) console.error('EmailJS admin error:', await r1.text());
     if (!r2.ok) console.error('EmailJS client error:', await r2.text());
 
-    return NextResponse.json({ ok: true, reservedUnits: afterReserved });
+    return NextResponse.json({ ok: true, reservationId, totalChf: totalCHF, reservedUnits: afterReserved });
   } catch (e: any) {
     console.error(e);
-    const msg = e?.message ?? 'Erreur serveur';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: e?.message ?? 'Erreur serveur' }, { status: 500 });
   }
 }
