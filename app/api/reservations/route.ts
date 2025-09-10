@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 3) Prix fixe pour tout le séjour
-    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF par tipi, séjour complet
+    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF par tipi pour 26–28 juin 2026
     const totalCHF = unitPriceCHF * qty;
 
     // 4) Enregistrer la réservation
@@ -59,85 +59,30 @@ export async function POST(req: NextRequest) {
       totalCHF,
       stayLabel: STAY_LABEL,
       status: 'confirmed',
-      paymentStatus: 'pending', // à encaisser
+      paymentStatus: 'pending',
       cancelToken: crypto.randomUUID(),
       createdAt: new Date(),
     });
 
     const reservationId = reservationRef.id;
 
-    // 5) URLs utiles (annulation + QR)
+    // 5) URL QR (si base publique définie)
     const base =
       process.env.SITE_BASE_URL ||
       process.env.NEXT_PUBLIC_BASE_URL ||
       '';
-    const cancelToken = (await reservationRef.get()).data()!.cancelToken as string;
-    const cancelUrl = base ? `${base}/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}` : '';
     const qrUrl = base
       ? `${base}/api/qr?amount=${totalCHF}&ref=${encodeURIComponent('Resa ' + reservationId)}`
       : '';
 
-    // 6) Texte lisible
-    const formatCHF = (n: number) =>
-      new Intl.NumberFormat('fr-CH', { style: 'currency', currency: 'CHF' }).format(n);
-
-    const totalCHFFormatted = formatCHF(totalCHF);
-    const unitCHFFormatted = formatCHF(unitPriceCHF);
-
-    const paymentInstructions = [
-      `Montant à payer : ${totalCHFFormatted} (${unitCHFFormatted} / tipi × ${qty})`,
-      `Paiement par TWINT au numéro +41 78 902 87 58 (ou en espèces à l'arrivée).`,
-      `Référence à indiquer : Resa ${reservationId}`,
-    ].join('\n');
-
-    // 7) Emails via EmailJS (mêmes variables + nouvelles : stay_label, qr_url, reservation_id)
-    const endpoint = 'https://api.emailjs.com/api/v1.0/email/send';
-    const headers = { 'Content-Type': 'application/json' };
-    const templateIdClient = process.env.EMAILJS_TEMPLATE_ID;
-    const templateIdAdmin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || templateIdClient;
-    const common = {
-      service_id: process.env.EMAILJS_SERVICE_ID,
-      user_id: process.env.EMAILJS_PUBLIC_KEY,
-    } as const;
-
-    const templateParams = {
-      to_email: '',                  // sera fourni par chaque payload
-      customer_name: name,
-      customer_email: email,
-      lodging_id: lodgingId,
-      lodging_name: lodgingData?.name ?? lodgingId,
-      quantity: qty,
-      unit_price_chf: unitCHFFormatted,
-      total_chf: totalCHFFormatted,
-      stay_label: STAY_LABEL,        // << nouveau
-      payment_instructions: paymentInstructions,
-      cancel_url: cancelUrl,
-      reservation_id: reservationId, // << nouveau
-      qr_url: qrUrl,                 // << nouveau
-    };
-
-    // Admin
-    const payloadAdmin = {
-      ...common,
-      template_id: templateIdAdmin,
-      template_params: { ...templateParams, to_email: process.env.RESERVATION_ADMIN_EMAIL || '' },
-    };
-
-    // Client
-    const payloadClient = {
-      ...common,
-      template_id: templateIdClient,
-      template_params: { ...templateParams, to_email: email },
-    };
-
-    const [r1, r2] = await Promise.all([
-      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadAdmin) }),
-      fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payloadClient) }),
-    ]);
-    if (!r1.ok) console.error('EmailJS admin error:', await r1.text());
-    if (!r2.ok) console.error('EmailJS client error:', await r2.text());
-
-    return NextResponse.json({ ok: true, reservationId, totalChf: totalCHF, reservedUnits: afterReserved });
+    // 6) Réponse pour le front
+    return NextResponse.json({
+      ok: true,
+      reservationId,
+      totalChf: totalCHF,
+      qrUrl,
+      reservedUnits: afterReserved,
+    });
   } catch (e: any) {
     console.error(e);
     return NextResponse.json({ error: e?.message ?? 'Erreur serveur' }, { status: 500 });
