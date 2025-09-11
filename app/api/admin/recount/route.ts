@@ -1,45 +1,54 @@
-export const runtime = "nodejs";
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const token = url.searchParams.get("token") || "";
-  const expected = process.env.ADMIN_RESET_TOKEN || "";
-  if (!expected || token !== expected) {
+  const token = url.searchParams.get("token");
+
+  // Vérif du token admin
+  if (token !== process.env.ADMIN_RESET_TOKEN) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = getAdminDb();
+  try {
+    const db = getAdminDb();
 
-  // 1) Agréger les qty des réservations confirmées
-  const snap = await db.collection("reservations").where("status", "==", "confirmed").get();
-  const totals: Record<string, number> = {};
-  snap.forEach((doc) => {
-    const d = doc.data() as any;
-    const id = String(d.lodgingId || "");
-    const q = Number(d.qty || 0);
-    if (!id) return;
-    totals[id] = (totals[id] || 0) + (Number.isFinite(q) ? q : 0);
-  });
+    // Récupérer toutes les réservations confirmées
+    const reservationsSnap = await db
+      .collection("reservations")
+      .where("status", "==", "confirmed")
+      .get();
 
-  // 2) Appliquer sur les docs lodgings
-  const batch = db.batch();
-  const touched: Record<string, number> = {};
-  Object.entries(totals).forEach(([lodgingId, reserved]) => {
-    const ref = db.collection("lodgings").doc(lodgingId);
-    batch.update(ref, { reservedUnits: reserved });
-    touched[lodgingId] = reserved;
-  });
+    // Calcul des quantités réservées par logement
+    const counts: Record<string, number> = {};
+    reservationsSnap.forEach((doc) => {
+      const data = doc.data();
+      const lodgingId = data.lodgingId as string;
+      const qty = data.quantity as number;
+      counts[lodgingId] = (counts[lodgingId] || 0) + qty;
+    });
 
-  // Remettre à 0 les lodgings non présents dans `totals`
-  const lods = await db.collection("lodgings").get();
-  lods.docs.forEach((d) => {
-    if (!(d.id in touched)) batch.update(d.ref, { reservedUnits: 0 });
-  });
+    // Mettre à jour chaque logement avec le bon reservedUnits
+    const lodgingsSnap = await db.collection("lodgings").get();
+    const batch = db.batch();
 
-  await batch.commit();
+    lodgingsSnap.forEach((doc) => {
+      const data = doc.data();
+      const lodgingId = doc.id;
+      const reservedUnits = counts[lodgingId] || 0;
 
-  return NextResponse.json({ ok: true, computed: { ...touched }, confirmedCount: snap.size });
+      batch.update(doc.ref, { reservedUnits });
+    });
+
+    await batch.commit();
+
+    return NextResponse.json({
+      ok: true,
+      computed: counts,
+      confirmedCount: reservationsSnap.size,
+    });
+  } catch (err) {
+    console.error("Erreur recount:", err);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+  }
 }
