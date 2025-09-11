@@ -13,9 +13,9 @@ export default function Page() {
       {/* En-tête */}
       <section className="px-4 pt-10 pb-6">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="font-[var(--font-playfair)] text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-slate-900">
-            Réservation hébergements tente
-          </h1>
+          <h1 className="font-[var(--font-playfair)] text-5xl text-center mb-2 text-[#b88b5d]">
+  Réservation hébergements tente
+</h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-700">
             Les tentes sont installées directement sur le{" "}
