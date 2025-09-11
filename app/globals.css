@@ -5,27 +5,29 @@
 body {
   font-family: var(--font-cormorant), serif;
 
-  /* ✨ Taille et lisibilité boostées */
-  font-size: 1.15rem;     /* +15% au lieu de 1rem */
-  line-height: 1.7;       /* interligne encore plus aéré */
+  /* ✨ Taille et lisibilité boostées fortement */
+  font-size: 1.35rem;     /* au lieu de 1rem → +35% */
+  line-height: 1.8;       /* interligne encore plus aéré */
 
   margin: 0;
   padding: 0;
 
   /* 🌄 Fond avec photo domaine */
   background:
-    linear-gradient(rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.90)),
+    linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
     url("/domaine.jpg") center/cover no-repeat fixed;
 
-  color: #0d0d0d; /* plus foncé que #111827 → meilleur contraste */
+  color: #0b0b0b; /* encore un peu plus foncé → meilleur contraste */
 }
 
 h1, h2, h3 {
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
+
+  /* titres encore plus mis en avant */
+  line-height: 1.3;
 }
 
-/* --- Classes utilitaires personnalisées --- */
 .card {
   @apply rounded-2xl bg-white shadow-sm border border-gray-100;
 }
@@ -39,7 +41,6 @@ h1, h2, h3 {
   @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
 
-/* --- Fond "papier peint" (Domaine.jpg) + voile blanc --- */
 .hero-bg {
   position: fixed;
   inset: 0;
@@ -54,6 +55,6 @@ h1, h2, h3 {
 .hero-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.75);
   z-index: -1;
 }
