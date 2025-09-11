@@ -33,14 +33,21 @@ h1, h2, h3 {
 .badge {
   @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
-/* --- Fond papier peint + voile blanc --- */
+/* --- Fond "papier peint" (Domaine.jpg) + voile blanc --- */
 .hero-bg{
-  background-image:url("/Domaine.jpg"); /* ton image */
+  position: fixed;
+  inset: 0;
+  background-image:url("/Domaine.jpg");
   background-size:cover;
   background-position:center;
-  background-attachment:fixed;
+  /* enlever le fixed natif qui cause parfois un "trou" de fin de page */
+  background-attachment:scroll;
   filter:saturate(95%);
+  z-index:-2;
 }
 .hero-overlay{
-  background:rgba(255,255,255,0.72); /* voile blanc doux */
+  position: fixed;
+  inset: 0;
+  background:rgba(255,255,255,0.72);
+  z-index:-1;
 }
