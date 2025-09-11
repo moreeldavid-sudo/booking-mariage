@@ -1,99 +1,69 @@
-// components/LodgingCard.tsx
 "use client";
 
-import Image from "next/image";
+import React from "react";
+import { Lodging } from "../types";
+import { Badge } from "./ui/badge";
 
-export type Lodging = {
-  id: string;
-  name: string;
-  description?: string;
-  imageUrl?: string;
-  totalUnits?: number;
-  reservedUnits?: number;
-  type?: "double_140" | "twin_90" | string;
-};
-
-type Props = {
+interface LodgingCardProps {
   lodging: Lodging;
-  onReserve?: (lodging: Lodging) => void;
-  ctaLabel?: string;
-};
+  onReserve: (lodging: Lodging) => void;
+}
 
-const PRICE_PER_TIPI_TOTAL = 200; // CHF pour tout le séjour
-const STAY_LABEL = "pour les 3 nuits (26–28 juin 2026)";
-
-export default function LodgingCard({
-  lodging,
-  onReserve,
-  ctaLabel = "Voir / Réserver",
-}: Props) {
-  const total = lodging.totalUnits ?? 0;
-  const reserved = lodging.reservedUnits ?? 0;
-  const remaining = Math.max(total - reserved, 0);
+export default function LodgingCard({ lodging, onReserve }: LodgingCardProps) {
+  const available = lodging.totalUnits - lodging.reservedUnits;
+  const isFull = available <= 0;
 
   return (
-    <div className="h-full rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
-      {/* Image */}
-      <div className="relative h-48 w-full">
-        <Image
-          src={lodging.imageUrl || "/tipi.jpg"}
-          alt={lodging.name}
-          fill
-          className="object-cover"
-          priority={false}
-        />
-      </div>
+    <div className="card flex flex-col h-full">
+      <img
+        src="/tipi.jpg"
+        alt={lodging.title}
+        className="w-full h-48 object-cover rounded-t-xl"
+      />
 
-      {/* Contenu */}
-      <div className="p-4 flex-1 flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-lg font-semibold leading-snug">{lodging.name}</h3>
+      <div className="p-4 flex flex-col flex-grow">
+        {/* Titre plus grand */}
+        <h2 className="text-xl md:text-2xl font-semibold mb-2">
+          {lodging.title}
+        </h2>
 
-          {/* Disponibilités */}
-          <div
-            className={`text-sm px-2 py-1 rounded-full whitespace-nowrap ${
-              remaining > 5
-                ? "bg-emerald-50 text-emerald-700"
-                : remaining > 0
-                ? "bg-amber-50 text-amber-700"
-                : "bg-rose-50 text-rose-700"
-            }`}
-            title={`Disponibles: ${remaining}/${total}`}
-          >
-            {remaining > 0 ? `${remaining} dispo` : "Complet"}
-          </div>
-        </div>
-
-        {lodging.description && (
-          <p className="text-sm text-gray-600">{lodging.description}</p>
+        {/* Badge de dispo */}
+        {isFull ? (
+          <Badge className="bg-red-500 text-white">Complet</Badge>
+        ) : (
+          <Badge className="bg-green-100 text-green-700">
+            {available} dispo
+          </Badge>
         )}
 
-        {/* PRIX FIXE POUR LE SÉJOUR */}
-        <div className="mt-1">
-          <span className="inline-flex items-center gap-2 text-sm">
-            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-900 font-medium">
-              {PRICE_PER_TIPI_TOTAL} CHF
-            </span>
-            <span className="text-gray-600">par tipi {STAY_LABEL}</span>
+        {/* Description agrandie */}
+        <p className="mt-3 text-base md:text-lg text-gray-700">
+          {lodging.description}
+        </p>
+
+        {/* Prix */}
+        <div className="mt-4 flex items-center space-x-2">
+          <span className="px-2 py-1 rounded-full bg-gray-100 font-semibold">
+            200 CHF
+          </span>
+          <span className="text-sm md:text-base text-gray-600">
+            par tipi pour les 3 nuits (26–28 juin 2026)
           </span>
         </div>
 
-        <div className="text-xs text-gray-500">
+        {/* Petit texte */}
+        <p className="mt-2 text-xs md:text-sm text-gray-500">
           Prix identique pour lit 140 cm et 2×90 cm.
-        </div>
+        </p>
 
-        {/* Pousse le CTA en bas pour aligner les boutons */}
-        <div className="mt-auto">
+        {/* Bouton collé en bas */}
+        <div className="mt-auto pt-4">
           <button
-            onClick={() => onReserve?.(lodging)}
-            disabled={remaining <= 0}
-            className={`mt-2 w-full rounded-xl px-4 py-2 text-sm text-white transition ${
-              remaining > 0
-                ? "bg-black hover:bg-gray-800"
-                : "bg-gray-400 cursor-not-allowed"
-            }`}
+            className={`btn w-full ${isFull ? "opacity-50 cursor-not-allowed" : ""}`}
+            onClick={() => !isFull && onReserve(lodging)}
+            disabled={isFull}
           >
-            {ctaLabel}
+            Voir / Réserver
           </button>
         </div>
       </div>
