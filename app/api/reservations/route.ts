@@ -9,17 +9,23 @@ import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   try {
-    const { lodgingId, quantity, name, email } = await req.json();
+    const body = await req.json();
+    console.log("📩 Requête reçue:", body);
+
+    const { lodgingId, quantity, name, email } = body;
 
     // 1) Validations basiques
     if (!lodgingId || !quantity || !name || !email) {
+      console.error("❌ Champs manquants:", { lodgingId, quantity, name, email });
       return NextResponse.json({ error: "Champs manquants." }, { status: 400 });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      console.error("❌ Email invalide:", email);
       return NextResponse.json({ error: "Email invalide." }, { status: 400 });
     }
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
+      console.error("❌ Quantité invalide:", quantity);
       return NextResponse.json({ error: "Quantité invalide." }, { status: 400 });
     }
 
@@ -35,6 +41,8 @@ export async function POST(req: NextRequest) {
       if (!snap.exists) throw new Error("Hébergement introuvable.");
       const data = snap.data() as any;
       lodgingData = data;
+
+      console.log("🏕️ Données lodging:", data);
 
       const totalUnits: number = data.totalUnits ?? 0;
       const reservedUnits: number = data.reservedUnits ?? 0;
@@ -55,7 +63,7 @@ export async function POST(req: NextRequest) {
     // 4) Enregistrer la réservation
     const reservationRef = await db.collection("reservations").add({
       lodgingId,
-      lodgingName: lodgingData?.name ?? lodgingId,
+      lodgingName: lodgingData?.title ?? lodgingId, // 🔥 correction: Firestore a "title", pas "name"
       qty,
       name,
       email,
@@ -67,6 +75,8 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     });
 
+    console.log("✅ Réservation enregistrée:", reservationRef.id);
+
     // 5) Répondre au front (le modal)
     return NextResponse.json({
       ok: true,
@@ -75,7 +85,10 @@ export async function POST(req: NextRequest) {
       reservedUnits: afterReserved,
     });
   } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ error: e?.message ?? "Erreur serveur" }, { status: 500 });
+    console.error("🔥 Erreur dans /api/reservations:", e);
+    return NextResponse.json(
+      { error: e?.message ?? "Erreur serveur" },
+      { status: 500 }
+    );
   }
 }
