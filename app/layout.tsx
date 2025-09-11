@@ -1,27 +1,29 @@
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Inter, Playfair_Display } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
 
 export const metadata: Metadata = {
-  title: "Réservations Hébergements",
-  description: "Plateforme de réservation pour le mariage",
+  title: "Réservation hébergements — Mariage",
+  description: "Réservation des tentes (tipis) pour le mariage – Domaine de Brés",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className="relative min-h-screen">
-        {/* Image de fond */}
-        <div
-          className="fixed inset-0 bg-cover bg-center opacity-30 -z-20"
-          style={{ backgroundImage: "url('/Domaine.jpg')" }}
-        />
-        {/* Voile blanc léger pour lisibilité */}
-        <div className="fixed inset-0 bg-white/10 -z-10" />
-        
-        {/* Contenu */}
-        <div className="relative z-10">{children}</div>
+      <body
+        className={`${inter.variable} ${playfair.variable} bg-gradient-to-br from-slate-50 to-white text-slate-900 antialiased`}
+      >
+        <div className="min-h-screen">
+          {children}
+        </div>
       </body>
     </html>
   );
