@@ -1,54 +1,7 @@
 // app/page.tsx
 import LodgingList from "@/components/LodgingList";
-import { getFirestore } from "firebase/firestore";
-import { initializeApp, getApps } from "firebase/app";
 
-// --- Init Firebase client (lecture publique) ---
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-};
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
-const db = getFirestore();
-
-// Fetch lodgings
-async function getLodgings() {
-  const { collection, getDocs } = await import("firebase/firestore");
-  const snap = await getDocs(collection(db, "lodgings"));
-  const items: any[] = [];
-  snap.forEach((doc) => items.push({ id: doc.id, ...doc.data() }));
-
-  // Surcharges (Majuscules)
-  const overrides: Record<string, string> = {
-    "tipis-lit140": "Tente avec 1 lit de 140 (2 pers.)",
-    "tipis-lits90": "Tente avec 2 lits de 90 (2 pers.)",
-  };
-
-  return items
-    .sort((a, b) => String(a.title || a.name || a.id).localeCompare(String(b.title || b.name || b.id)))
-    .map((l) => ({
-      id: l.id,
-      name: overrides[l.id] || l.title || l.name || l.id,
-      description:
-        l.description ||
-        (l.id === "tipis-lit140"
-          ? "Tente en coton de 13 m² avec un lit haut de gamme de 140 cm."
-          : l.id === "tipis-lits90"
-          ? "Tente en coton de 13 m² avec deux lits haut de gamme de 90 cm."
-          : ""),
-      imageUrl: l.imageUrl || "/tipi.jpg",
-      totalUnits: l.totalUnits ?? 0,
-      reservedUnits: l.reservedUnits ?? 0,
-      type: l.type || "tipi",
-    }));
-}
-
-export default async function Page() {
-  const lodgings = await getLodgings();
-
+export default function Page() {
   return (
     <main className="relative">
       {/* FOND : Domaine.jpg + voile blanc */}
@@ -78,7 +31,7 @@ export default async function Page() {
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
-              <LodgingList lodgings={lodgings} />
+              <LodgingList />
             </div>
           </div>
         </div>
