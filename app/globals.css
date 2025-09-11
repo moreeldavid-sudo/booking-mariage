@@ -5,9 +5,9 @@
 body {
   font-family: var(--font-cormorant), serif;
 
-  /* 💥 XXL : police énorme */
+  /* 💥 XXL */
   font-size: 2rem;      /* ~32px */
-  line-height: 2.1;     /* interligne ultra aéré */
+  line-height: 2.1;
 
   margin: 0;
   padding: 0;
@@ -16,14 +16,15 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
     url("/domaine.jpg") center/cover no-repeat fixed;
 
-  color: #000000; /* noir franc, contraste maximum */
+  color: #000000;
+
+  /* 👉 Tout le texte en gras */
+  font-weight: 700;
 }
 
 h1, h2, h3 {
-  font-weight: 700;
+  font-weight: 900; /* encore plus gras pour titres */
   line-height: 1.2;
-
-  /* 🚀 Titres géants */
   font-size: 4.5rem;   /* ~72px */
 }
 
@@ -33,11 +34,11 @@ h1, h2, h3 {
 
 .btn-primary {
   @apply inline-flex items-center justify-center rounded-lg text-white
-         bg-rose-600 hover:bg-rose-700 transition px-4 py-2 text-xl; /* boutons plus gros */
+         bg-rose-600 hover:bg-rose-700 transition px-4 py-2 text-xl font-bold;
 }
 
 .badge {
-  @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium;
+  @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-bold;
 }
 
 .hero-bg {
