@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  font-family: sans-serif;
+  font-family: var(--font-cormorant), serif; /* ✅ utilise Cormorant Garamond */
   margin: 0;
   padding: 0;
 
@@ -33,21 +33,22 @@ h1, h2, h3 {
 .badge {
   @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
+
 /* --- Fond "papier peint" (Domaine.jpg) + voile blanc --- */
-.hero-bg{
+.hero-bg {
   position: fixed;
   inset: 0;
-  background-image:url("/Domaine.jpg");
-  background-size:cover;
-  background-position:center;
-  /* enlever le fixed natif qui cause parfois un "trou" de fin de page */
-  background-attachment:scroll;
-  filter:saturate(95%);
-  z-index:-2;
+  background-image: url("/Domaine.jpg");
+  background-size: cover;
+  background-position: center;
+  background-attachment: scroll; /* ✅ évite le trou de fin de page */
+  filter: saturate(95%);
+  z-index: -2;
 }
-.hero-overlay{
+
+.hero-overlay {
   position: fixed;
   inset: 0;
-  background:rgba(255,255,255,0.72);
-  z-index:-1;
+  background: rgba(255, 255, 255, 0.72);
+  z-index: -1;
 }
