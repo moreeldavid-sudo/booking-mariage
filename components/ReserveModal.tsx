@@ -15,16 +15,15 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
     setLoading(true);
     try {
       const res = await fetch("/api/reservations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lodgingId: lodging.id,
-          lodgingName: lodging.name,
-          customerName: name,
-          customerEmail: email,
-          quantity,
-        }),
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    lodgingId: lodging.id,
+    quantity,
+    name,
+    email,
+  }),
+});
 
       if (!res.ok) throw new Error("Erreur réservation");
 
