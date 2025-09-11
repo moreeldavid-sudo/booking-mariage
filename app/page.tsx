@@ -21,10 +21,10 @@ async function getLodgings() {
   const items: any[] = [];
   snap.forEach((doc) => items.push({ id: doc.id, ...doc.data() }));
 
-  // Surcharges d’intitulés (au cas où Firestore n’est pas encore à jour)
+  // Surcharges (Majuscules)
   const overrides: Record<string, string> = {
-    "tipis-lit140": "tente avec 1 lit de 140 (2 pers.)",
-    "tipis-lits90": "tente avec 2 lits de 90 (2 pers.)",
+    "tipis-lit140": "Tente avec 1 lit de 140 (2 pers.)",
+    "tipis-lits90": "Tente avec 2 lits de 90 (2 pers.)",
   };
 
   return items
@@ -52,9 +52,9 @@ export default async function Page() {
   return (
     <main className="relative">
       {/* FOND : Domaine.jpg + voile blanc */}
-      <div className="absolute inset-0 -z-10">
+      <div className="fixed inset-0 -z-10">
         <div className="hero-bg h-full w-full" />
-        <div className="absolute inset-0 hero-overlay" />
+        <div className="hero-overlay h-full w-full" />
       </div>
 
       {/* En-tête */}
