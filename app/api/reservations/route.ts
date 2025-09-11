@@ -1,90 +1,75 @@
-// app/api/reservations/route.ts
-export const runtime = 'nodejs';
+import { NextResponse } from "next/server";
+import { getAdminDb } from "@/lib/firebaseAdmin";
+import nodemailer from "nodemailer";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebaseAdmin';
-import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from '@/lib/constants';
-import crypto from 'crypto';
+// Prix fixe
+const PRICE_PER_TIPI = 200;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { lodgingId, quantity, name, email } = await req.json();
+    const { lodgingId, quantity, customer_name, customer_email } = await req.json();
 
-    // 1) Validations
-    if (!lodgingId || !quantity || !name || !email) {
-      return NextResponse.json({ error: 'Champs manquants.' }, { status: 400 });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Email invalide.' }, { status: 400 });
-    }
-    const qty = Number(quantity);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      return NextResponse.json({ error: 'Quantité invalide.' }, { status: 400 });
+    if (!lodgingId || !quantity || !customer_name || !customer_email) {
+      return NextResponse.json({ error: "Champs manquants" }, { status: 400 });
     }
 
-    // 2) Transaction: décrémenter les dispos
     const db = getAdminDb();
-    const lodgingRef = db.collection('lodgings').doc(lodgingId);
+    const lodgingRef = db.collection("lodgings").doc(lodgingId);
 
-    let afterReserved = 0;
-    let lodgingData: any = null;
+    // Transaction Firestore pour décrémenter les dispos
+    const result = await db.runTransaction(async (tx) => {
+      const lodgingDoc = await tx.get(lodgingRef);
+      if (!lodgingDoc.exists) throw new Error("Hébergement introuvable");
 
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(lodgingRef);
-      if (!snap.exists) throw new Error('Hébergement introuvable.');
-      const data = snap.data() as any;
-      lodgingData = data;
+      const lodging = lodgingDoc.data()!;
+      const reserved = lodging.reserved || 0;
+      const total = lodging.total || 0;
 
-      const totalUnits: number = data.totalUnits ?? 0;
-      const reserved: number = data.reservedUnits ?? 0;
-      const remaining = totalUnits - reserved;
-      if (qty > remaining) throw new Error(`Plus que ${remaining} disponibilité(s).`);
+      if (reserved + quantity > total) {
+        throw new Error("Plus assez de tipis disponibles");
+      }
 
-      afterReserved = reserved + qty;
-      tx.update(lodgingRef, { reservedUnits: afterReserved });
+      // Update reserved
+      tx.update(lodgingRef, { reserved: reserved + quantity });
+
+      // Calcul du prix
+      const totalPrice = quantity * PRICE_PER_TIPI;
+
+      // Sauvegarde réservation
+      const reservationRef = db.collection("reservations").doc();
+      const reservationData = {
+        id: reservationRef.id,
+        lodgingId,
+        lodgingName: lodging.name,
+        quantity,
+        customer_name,
+        customer_email,
+        totalPrice,
+        status: "pending",
+        createdAt: new Date(),
+      };
+      tx.set(reservationRef, reservationData);
+
+      return { reservationId: reservationRef.id, totalPrice, lodgingName: lodging.name };
     });
 
-    // 3) Prix fixe pour tout le séjour
-    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF par tipi pour 26–28 juin 2026
-    const totalCHF = unitPriceCHF * qty;
-
-    // 4) Enregistrer la réservation
-    const reservationRef = await db.collection('reservations').add({
-      lodgingId,
-      lodgingName: lodgingData?.name ?? lodgingId,
-      qty,
-      name,
-      email,
-      unitPriceCHF,
-      totalCHF,
-      stayLabel: STAY_LABEL,
-      status: 'confirmed',
-      paymentStatus: 'pending',
-      cancelToken: crypto.randomUUID(),
-      createdAt: new Date(),
+    // 👉 Envoi email confirmation via EmailJS (ou nodemailer si SMTP)
+    // Pour l’instant, on se contente d’un console.log
+    console.log("Email de confirmation à envoyer :", {
+      to: customer_email,
+      name: customer_name,
+      ref: result.reservationId,
+      lodging: result.lodgingName,
+      total: result.totalPrice,
     });
 
-    const reservationId = reservationRef.id;
-
-    // 5) URL QR (si base publique définie)
-    const base =
-      process.env.SITE_BASE_URL ||
-      process.env.NEXT_PUBLIC_BASE_URL ||
-      '';
-    const qrUrl = base
-      ? `${base}/api/qr?amount=${totalCHF}&ref=${encodeURIComponent('Resa ' + reservationId)}`
-      : '';
-
-    // 6) Réponse pour le front
     return NextResponse.json({
-      ok: true,
-      reservationId,
-      totalChf: totalCHF,
-      qrUrl,
-      reservedUnits: afterReserved,
+      success: true,
+      reservationId: result.reservationId,
+      totalPrice: result.totalPrice,
     });
-  } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ error: e?.message ?? 'Erreur serveur' }, { status: 500 });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
