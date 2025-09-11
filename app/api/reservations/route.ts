@@ -1,4 +1,3 @@
-// app/api/reservations/route.ts
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,10 +15,10 @@ function absUrl(path: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { lodgingId, quantity, name, email } = body;
+    const { lodgingId, quantity, firstName, lastName, email } = body;
 
     // Validations
-    if (!lodgingId || !quantity || !name || !email) {
+    if (!lodgingId || !quantity || !firstName || !lastName || !email) {
       return NextResponse.json({ error: "Champs manquants." }, { status: 400 });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -30,13 +29,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Quantité invalide." }, { status: 400 });
     }
 
+    const name = `${firstName} ${lastName}`.trim();
+
     const db = getAdminDb();
     const lodgingRef = db.collection("lodgings").doc(lodgingId);
 
     let afterReserved = 0;
     let lodgingData: any = null;
 
-    // Transaction: décrémenter les dispos
+    // Transaction
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(lodgingRef);
       if (!snap.exists) throw new Error("Hébergement introuvable.");
@@ -46,24 +47,23 @@ export async function POST(req: NextRequest) {
       const totalUnits: number = data.totalUnits ?? 0;
       const reservedUnits: number = data.reservedUnits ?? 0;
       const remaining = totalUnits - reservedUnits;
-      if (qty > remaining) throw new Error(`Plus que ${remaining} disponibilité(s).`);
+      if (qty > remaining) throw new Error(`Plus que ${remaining} dispo.`);
 
       afterReserved = reservedUnits + qty;
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // Prix / total
-    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF / tipi pour le séjour
+    const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
     const totalCHF = unitPriceCHF * qty;
 
-    // Générer un token d’annulation
     const cancelToken = cryptoRandom();
 
-    // Créer la réservation
     const reservationDoc = await db.collection("reservations").add({
       lodgingId,
       lodgingName: lodgingData?.title ?? lodgingId,
       qty,
+      firstName,
+      lastName,
       name,
       email,
       unitPriceCHF,
@@ -84,8 +84,8 @@ export async function POST(req: NextRequest) {
 
     const service_id = process.env.EMAILJS_SERVICE_ID!;
     const user_id = process.env.EMAILJS_PUBLIC_KEY!;
-    const template_id_client = process.env.EMAILJS_TEMPLATE_ID!;        // ex: template_sfn9sh4
-    const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN!;   // ex: template_gxdi3ws
+    const template_id_client = process.env.EMAILJS_TEMPLATE_ID!;
+    const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN!;
     const admin_email = process.env.RESERVATION_ADMIN_EMAIL || "";
 
     const baseParams = {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       cancel_url: cancelUrl,
     };
 
-    // --- Email Client ---
+    // Client
     const payloadClient = {
       service_id,
       template_id: template_id_client,
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // --- Email Admin ---
+    // Admin
     const payloadAdmin = admin_email
       ? {
           service_id,
@@ -125,7 +125,6 @@ export async function POST(req: NextRequest) {
         }
       : null;
 
-    // Envoi
     const promises: Promise<Response>[] = [
       fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadClient) }),
     ];
@@ -153,7 +152,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Petit générateur de token
 function cryptoRandom(len = 24) {
   const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let out = "";
