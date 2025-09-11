@@ -2,96 +2,125 @@
 import { useState } from "react";
 
 export default function ReserveModal({ lodging, onClose }: { lodging: any; onClose: () => void }) {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [confirmation, setConfirmation] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const PRICE = 200;
-  const total = quantity * PRICE;
+  const total = quantity * 200; // prix fixe
 
-  async function handleReserve() {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
     setLoading(true);
+
     try {
       const res = await fetch("/api/reservations", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    lodgingId: lodging.id,
-    quantity,
-    name,
-    email,
-  }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lodgingId: lodging.id,
+          quantity,
+          firstName,
+          lastName,
+          email,
+        }),
+      });
 
-      if (!res.ok) throw new Error("Erreur réservation");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
 
-      setDone(true);
-    } catch (err) {
-      alert("Impossible d’enregistrer la réservation");
+      setConfirmation(data);
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  if (confirmation) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <h2 className="text-xl font-semibold mb-4">Merci {firstName} !</h2>
+          <p>
+            Votre réservation est confirmée. <br />
+            Réf: <b>{confirmation.reservationId}</b>
+          </p>
+          <p className="mt-2">Montant total : <b>{confirmation.totalChf} CHF</b></p>
+          <p className="mt-2">Un email de confirmation vous a été envoyé.</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">
+            Fermer
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md">
-        {!done ? (
-          <>
-            <h2 className="text-xl font-bold mb-4">Réserver {lodging.name}</h2>
-            <label className="block mb-2">
-              Nom :
-              <input
-                className="w-full border rounded px-2 py-1"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-            <label className="block mb-2">
-              Email :
-              <input
-                className="w-full border rounded px-2 py-1"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className="block mb-4">
-              Nombre de tipis :
-              <input
-                type="number"
-                min={1}
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-                className="w-full border rounded px-2 py-1"
-              />
-            </label>
-            <p className="mb-4 font-semibold">Total : {total} CHF</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="px-3 py-1 rounded bg-gray-300">Annuler</button>
-              <button
-                onClick={handleReserve}
-                disabled={loading}
-                className="px-3 py-1 rounded bg-green-600 text-white"
-              >
-                {loading ? "Envoi..." : "Confirmer"}
-              </button>
-            </div>
-          </>
-        ) : (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4">Réserver {lodging.title}</h2>
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <h2 className="text-xl font-bold mb-4">Merci 🎉</h2>
-            <p>Votre réservation est enregistrée.</p>
-            <p className="mt-2">Vous allez recevoir un email de confirmation.</p>
+            <label className="block text-sm font-medium">Prénom</label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Nom</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Nombre de tipis</label>
+            <input
+              type="number"
+              min={1}
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+              required
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <p className="text-sm">Total : <b>{total} CHF</b></p>
+          {error && <p className="text-red-600">{error}</p>}
+          <div className="flex justify-end space-x-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-300 rounded">
+              Annuler
+            </button>
             <button
-              onClick={onClose}
-              className="mt-4 px-3 py-1 rounded bg-blue-600 text-white"
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded"
             >
-              Fermer
+              {loading ? "Envoi..." : "Confirmer"}
             </button>
           </div>
-        )}
+        </form>
       </div>
     </div>
   );
