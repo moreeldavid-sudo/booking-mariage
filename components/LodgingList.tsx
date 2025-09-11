@@ -1,4 +1,3 @@
-// components/LodgingList.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,8 +17,31 @@ type Lodging = {
   type?: string;
 };
 
+function SkeletonCard() {
+  return (
+    <div className="w-full max-w-md h-full animate-pulse">
+      <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
+        {/* Image placeholder */}
+        <div className="relative h-48 w-full bg-gray-200" />
+        <div className="p-4 flex-1 flex flex-col justify-between">
+          {/* Title */}
+          <div className="h-6 bg-gray-200 rounded w-2/3 mb-3" />
+          {/* Description */}
+          <div className="h-4 bg-gray-200 rounded w-full mb-2" />
+          <div className="h-4 bg-gray-200 rounded w-5/6 mb-4" />
+          {/* Button */}
+          <div className="mt-auto">
+            <div className="h-10 bg-gray-200 rounded-lg w-full" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LodgingList() {
   const [lodgings, setLodgings] = useState<Lodging[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Lodging | null>(null);
 
@@ -39,6 +61,7 @@ export default function LodgingList() {
         } as Lodging;
       });
       setLodgings(items);
+      setLoading(false);
     });
     return () => unsub();
   }, []);
@@ -46,18 +69,20 @@ export default function LodgingList() {
   return (
     <>
       <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-2 justify-items-center">
-        {lodgings.map((l) => (
-          <div key={l.id} className="w-full max-w-md h-full">
-            <LodgingCard
-              lodging={l as any}
-              onReserve={(lodging) => {
-                setSelected(lodging as any);
-                setOpen(true);
-              }}
-              ctaLabel="Voir / Réserver"
-            />
-          </div>
-        ))}
+        {loading
+          ? [1, 2].map((i) => <SkeletonCard key={i} />)
+          : lodgings.map((l) => (
+              <div key={l.id} className="w-full max-w-md h-full">
+                <LodgingCard
+                  lodging={l as any}
+                  onReserve={(lodging) => {
+                    setSelected(lodging as any);
+                    setOpen(true);
+                  }}
+                  ctaLabel="Voir / Réserver"
+                />
+              </div>
+            ))}
       </div>
 
       {open && !!selected && (
