@@ -33,3 +33,14 @@ h1, h2, h3 {
 .badge {
   @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
+/* --- Fond papier peint + voile blanc --- */
+.hero-bg{
+  background-image:url("/Domaine.jpg"); /* ton image */
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
+  filter:saturate(95%);
+}
+.hero-overlay{
+  background:rgba(255,255,255,0.72); /* voile blanc doux */
+}
