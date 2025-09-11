@@ -47,14 +47,14 @@ export default function LodgingCard({
       {/* Contenu */}
       <div className="p-6 flex-1 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
-          {/* Titre — taille réduite pour rester sur une ligne */}
-          <h3 className="text-lg sm:text-xl md:text-2xl font-semibold leading-snug tracking-tight">
+          {/* Titre (Playfair, taille classique) */}
+          <h3 className="text-xl md:text-2xl font-semibold leading-snug tracking-tight font-[var(--font-playfair)]">
             {lodging.name}
           </h3>
 
           {/* Disponibilités */}
           <span
-            className={`text-xs sm:text-sm md:text-base px-3 py-1 rounded-full whitespace-nowrap self-start ${
+            className={`text-sm md:text-base px-3 py-1 rounded-full whitespace-nowrap self-start ${
               remaining > 5
                 ? "bg-emerald-50 text-emerald-700"
                 : remaining > 0
@@ -69,12 +69,14 @@ export default function LodgingCard({
 
         {/* Description */}
         {lodging.description && (
-          <p className="text-base text-gray-700">{lodging.description}</p>
+          <p className="text-sm md:text-base text-gray-700">
+            {lodging.description}
+          </p>
         )}
 
-        {/* PRIX FIXE POUR LE SÉJOUR */}
+        {/* Prix */}
         <div className="mt-1">
-          <span className="inline-flex items-center gap-3 text-base md:text-lg">
+          <span className="inline-flex items-center gap-3 text-sm md:text-base">
             <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold">
               {PRICE_PER_TIPI_TOTAL} CHF
             </span>
@@ -82,7 +84,7 @@ export default function LodgingCard({
           </span>
         </div>
 
-        <div className="mt-1 text-sm md:text-base text-gray-500">
+        <div className="mt-1 text-xs md:text-sm text-gray-500">
           Prix identique pour lit 140 cm et 2×90 cm.
         </div>
 
@@ -91,7 +93,7 @@ export default function LodgingCard({
           <button
             onClick={() => onReserve(lodging)}
             disabled={isFull}
-            className={`mt-auto rounded-xl px-6 py-3 text-base md:text-lg text-white transition font-semibold ${
+            className={`mt-auto rounded-xl px-6 py-3 text-sm md:text-base text-white transition font-semibold ${
               !isFull
                 ? "bg-black hover:bg-gray-800"
                 : "bg-gray-400 cursor-not-allowed"
