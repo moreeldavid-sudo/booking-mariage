@@ -1,42 +1,54 @@
 // lib/firebaseAdmin.ts
-import admin from 'firebase-admin';
+import * as admin from "firebase-admin";
 
-let _db: admin.firestore.Firestore | null = null;
+let app: admin.app.App | undefined;
 
-export function getAdminDb() {
-  if (_db) return _db;
+function getEnv(name: string): string | undefined {
+  return process.env[name] || undefined;
+}
 
-  // --- Lis les variables d'environnement (noms FB_ comme tu as choisi) ---
-  const projectId  = process.env.FB_PROJECT_ID;
-  const clientEmail = process.env.FB_CLIENT_EMAIL;
-  let privateKey   = process.env.FB_PRIVATE_KEY || '';
+// Accepte les deux conventions d'ENV: FIREBASE_* et FB_*
+const projectId =
+  getEnv("FIREBASE_PROJECT_ID") ||
+  getEnv("FB_PROJECT_ID");
 
-  // Accepte la clé privée au format "échappé" (\n) ou multilignes
-  if (privateKey.includes('\\n')) {
-    privateKey = privateKey.replace(/\\n/g, '\n');
-  }
+const clientEmail =
+  getEnv("FIREBASE_CLIENT_EMAIL") ||
+  getEnv("FB_CLIENT_EMAIL");
 
-  const missing: string[] = [];
-  if (!projectId)   missing.push('FB_PROJECT_ID');
-  if (!clientEmail) missing.push('FB_CLIENT_EMAIL');
-  if (!privateKey)  missing.push('FB_PRIVATE_KEY');
+let privateKey =
+  getEnv("FIREBASE_PRIVATE_KEY") ||
+  getEnv("FB_PRIVATE_KEY");
 
-  if (missing.length) {
-    throw new Error(
-      `Firebase Admin env manquantes: ${missing.join(' / ')}`
-    );
-  }
+// Vercel stocke souvent la clé avec \n littéraux -> on les remet en vrais retours à la ligne
+if (privateKey) {
+  privateKey = privateKey.replace(/\\n/g, "\n");
+}
 
-  if (!admin.apps.length) {
-    admin.initializeApp({
+if (!admin.apps.length) {
+  if (projectId && clientEmail && privateKey) {
+    app = admin.initializeApp({
       credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
       }),
     });
+  } else {
+    // Fallback: tentera d'utiliser GOOGLE_APPLICATION_CREDENTIALS si dispo
+    app = admin.initializeApp();
+    if (!projectId || !clientEmail || !privateKey) {
+      console.warn(
+        "⚠️ Firebase Admin: credentials non fournies via ENV (FIREBASE_* ou FB_*). " +
+        "On tente le fallback par défaut (GOOGLE_APPLICATION_CREDENTIALS)."
+      );
+    }
   }
+}
 
-  _db = admin.firestore();
-  return _db;
+export function getAdminDb() {
+  if (!app) {
+    throw new Error("Firebase Admin non initialisé.");
+  }
+  return admin.firestore();
 }
