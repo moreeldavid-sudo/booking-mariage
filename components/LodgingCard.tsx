@@ -82,21 +82,19 @@ export default function LodgingCard({
           Prix identique pour lit 140 cm et 2×90 cm.
         </div>
 
-        {/* Pousser le CTA en bas pour aligner les boutons entre cartes */}
+        {/* Pousse le CTA en bas pour aligner les boutons */}
         <div className="mt-auto">
-          {onReserve && (
-            <button
-              onClick={() => onReserve(lodging)}
-              disabled={remaining <= 0}
-              className={`mt-2 w-full rounded-xl px-4 py-2 text-sm text-white transition ${
-                remaining > 0
-                  ? "bg-black hover:bg-gray-800"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              {ctaLabel}
-            </button>
-          )}
+          <button
+            onClick={() => onReserve?.(lodging)}
+            disabled={remaining <= 0}
+            className={`mt-2 w-full rounded-xl px-4 py-2 text-sm text-white transition ${
+              remaining > 0
+                ? "bg-black hover:bg-gray-800"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            {ctaLabel}
+          </button>
         </div>
       </div>
     </div>
