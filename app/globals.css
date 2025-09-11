@@ -4,8 +4,11 @@
 
 body {
   font-family: var(--font-cormorant), serif;
-  font-size: 1.05rem;     /* +5% lisibilité */
-  line-height: 1.65;      /* interlignage plus confortable */
+
+  /* ✨ Taille et lisibilité boostées */
+  font-size: 1.15rem;     /* +15% au lieu de 1rem */
+  line-height: 1.7;       /* interligne encore plus aéré */
+
   margin: 0;
   padding: 0;
 
@@ -14,7 +17,7 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.90)),
     url("/domaine.jpg") center/cover no-repeat fixed;
 
-  color: #111827;
+  color: #0d0d0d; /* plus foncé que #111827 → meilleur contraste */
 }
 
 h1, h2, h3 {
@@ -37,19 +40,20 @@ h1, h2, h3 {
 }
 
 /* --- Fond "papier peint" (Domaine.jpg) + voile blanc --- */
-.hero-bg{
+.hero-bg {
   position: fixed;
   inset: 0;
-  background-image:url("/Domaine.jpg");
-  background-size:cover;
-  background-position:center;
-  background-attachment:scroll;
-  filter:saturate(95%);
-  z-index:-2;
+  background-image: url("/Domaine.jpg");
+  background-size: cover;
+  background-position: center;
+  background-attachment: scroll;
+  filter: saturate(95%);
+  z-index: -2;
 }
-.hero-overlay{
+
+.hero-overlay {
   position: fixed;
   inset: 0;
-  background:rgba(255,255,255,0.72);
-  z-index:-1;
+  background: rgba(255, 255, 255, 0.72);
+  z-index: -1;
 }
