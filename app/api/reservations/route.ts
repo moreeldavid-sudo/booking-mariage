@@ -84,12 +84,11 @@ export async function POST(req: NextRequest) {
 
     const service_id = process.env.EMAILJS_SERVICE_ID!;
     const user_id = process.env.EMAILJS_PUBLIC_KEY!;
-    const template_id_client = process.env.EMAILJS_TEMPLATE_ID!;
-    const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || template_id_client;
+    const template_id_client = process.env.EMAILJS_TEMPLATE_ID!;        // ex: template_sfn9sh4
+    const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN!;   // ex: template_gxdi3ws
     const admin_email = process.env.RESERVATION_ADMIN_EMAIL || "";
 
     const baseParams = {
-      to_email: "", // on mettra la cible sur chaque payload
       customer_name: name,
       customer_email: email,
       lodging_id: lodgingId,
@@ -97,25 +96,32 @@ export async function POST(req: NextRequest) {
       quantity: String(qty),
       total_chf: String(totalCHF),
       reservation_id: reservationId,
-      summary_line: `${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodgingData?.title ?? lodgingId}`,
       cancel_url: cancelUrl,
     };
 
+    // --- Email Client ---
     const payloadClient = {
       service_id,
       template_id: template_id_client,
       user_id,
-      template_params: { ...baseParams, to_email: email },
+      template_params: {
+        ...baseParams,
+        to_email: email,
+        summary_line: `Réservation confirmée : ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF`,
+      },
     };
 
-    // ⚠️ Un seul mail admin, et seulement s’il est différent du client
-    const willSendAdmin = !!admin_email && admin_email !== email;
-    const payloadAdmin = willSendAdmin
+    // --- Email Admin ---
+    const payloadAdmin = admin_email
       ? {
           service_id,
           template_id: template_id_admin,
           user_id,
-          template_params: { ...baseParams, to_email: admin_email },
+          template_params: {
+            ...baseParams,
+            to_email: admin_email,
+            summary_line: `Nouvelle réservation : ${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodgingData?.title ?? lodgingId} — Total ${totalCHF} CHF`,
+          },
         }
       : null;
 
@@ -126,6 +132,7 @@ export async function POST(req: NextRequest) {
     if (payloadAdmin) {
       promises.push(fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) }));
     }
+
     const results = await Promise.all(promises);
     results.forEach(async (r, i) => {
       if (!r.ok) {
