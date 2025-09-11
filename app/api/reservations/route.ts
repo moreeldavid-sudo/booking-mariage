@@ -5,35 +5,38 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from "@/lib/constants";
 
+function absUrl(path: string) {
+  const base =
+    process.env.SITE_BASE_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    "";
+  return base ? `${base}${path}` : path;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📩 Requête reçue:", body);
-
     const { lodgingId, quantity, name, email } = body;
 
-    // 1) Validations
+    // Validations
     if (!lodgingId || !quantity || !name || !email) {
-      console.error("❌ Champs manquants:", { lodgingId, quantity, name, email });
       return NextResponse.json({ error: "Champs manquants." }, { status: 400 });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      console.error("❌ Email invalide:", email);
       return NextResponse.json({ error: "Email invalide." }, { status: 400 });
     }
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
-      console.error("❌ Quantité invalide:", quantity);
       return NextResponse.json({ error: "Quantité invalide." }, { status: 400 });
     }
 
-    // 2) Firestore
     const db = getAdminDb();
     const lodgingRef = db.collection("lodgings").doc(lodgingId);
 
     let afterReserved = 0;
     let lodgingData: any = null;
 
+    // Transaction: décrémenter les dispos
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(lodgingRef);
       if (!snap.exists) throw new Error("Hébergement introuvable.");
@@ -49,12 +52,15 @@ export async function POST(req: NextRequest) {
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // 3) Prix / total
-    const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
+    // Prix / total
+    const unitPriceCHF = PRICE_PER_TIPI_TOTAL; // 200 CHF / tipi pour le séjour
     const totalCHF = unitPriceCHF * qty;
 
-    // 4) Sauvegarder réservation
-    const reservationRef = await db.collection("reservations").add({
+    // Générer un token d’annulation
+    const cancelToken = cryptoRandom();
+
+    // Créer la réservation
+    const reservationDoc = await db.collection("reservations").add({
       lodgingId,
       lodgingName: lodgingData?.title ?? lodgingId,
       qty,
@@ -65,85 +71,85 @@ export async function POST(req: NextRequest) {
       stayLabel: STAY_LABEL,
       status: "confirmed",
       paymentStatus: "pending",
+      cancelToken,
       createdAt: new Date(),
     });
-    const reservationId = reservationRef.id;
 
-    // 5) EmailJS
+    const reservationId = reservationDoc.id;
+    const cancelUrl = absUrl(`/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`);
+
+    // ---- EmailJS ----
     const endpoint = "https://api.emailjs.com/api/v1.0/email/send";
     const headers = { "Content-Type": "application/json" };
 
-    const service_id = process.env.EMAILJS_SERVICE_ID;
-    const user_id = process.env.EMAILJS_PUBLIC_KEY;
-    const template_id_client = process.env.EMAILJS_TEMPLATE_ID;
+    const service_id = process.env.EMAILJS_SERVICE_ID!;
+    const user_id = process.env.EMAILJS_PUBLIC_KEY!;
+    const template_id_client = process.env.EMAILJS_TEMPLATE_ID!;
     const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN || template_id_client;
     const admin_email = process.env.RESERVATION_ADMIN_EMAIL || "";
 
-    // Log de présence des env (sans afficher leurs valeurs)
-    console.log("🔧 ENV presence:", {
-      SERVICE_ID: !!service_id,
-      TEMPLATE_ID_CLIENT: !!template_id_client,
-      TEMPLATE_ID_ADMIN: !!template_id_admin,
-      PUBLIC_KEY: !!user_id,
-      ADMIN_EMAIL: !!admin_email,
-    });
-
-    const formatCHF = (n: number) =>
-      new Intl.NumberFormat("fr-CH", { style: "currency", currency: "CHF" }).format(n);
-
-    const total_chf = String(totalCHF); // on laisse le "CHF" au template
-    const lodging_name = lodgingData?.title ?? lodgingId;
-    const lodging_id = lodgingId;
-    const quantity_str = String(qty);
-    const customer_name = name;
-    const customer_email = email;
-    const reservation_id = reservationId;
-    const summary_line = `${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodging_name}`;
-    const cancel_url = ""; // pas encore
-
     const baseParams = {
-      customer_name,
-      customer_email,
-      lodging_id,
-      lodging_name,
-      quantity: quantity_str,
-      total_chf,
-      reservation_id,
-      summary_line,
-      cancel_url,
+      to_email: "", // on mettra la cible sur chaque payload
+      customer_name: name,
+      customer_email: email,
+      lodging_id: lodgingId,
+      lodging_name: lodgingData?.title ?? lodgingId,
+      quantity: String(qty),
+      total_chf: String(totalCHF),
+      reservation_id: reservationId,
+      summary_line: `${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodgingData?.title ?? lodgingId}`,
+      cancel_url: cancelUrl,
     };
 
-    const payload_admin = {
-      service_id,
-      template_id: template_id_admin,
-      user_id,
-      template_params: { ...baseParams, to_email: admin_email },
-    };
-
-    const payload_client = {
+    const payloadClient = {
       service_id,
       template_id: template_id_client,
       user_id,
-      template_params: { ...baseParams, to_email: customer_email },
+      template_params: { ...baseParams, to_email: email },
     };
 
-    const [r1, r2] = await Promise.all([
-      fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payload_admin) }),
-      fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payload_client) }),
-    ]);
+    // ⚠️ Un seul mail admin, et seulement s’il est différent du client
+    const willSendAdmin = !!admin_email && admin_email !== email;
+    const payloadAdmin = willSendAdmin
+      ? {
+          service_id,
+          template_id: template_id_admin,
+          user_id,
+          template_params: { ...baseParams, to_email: admin_email },
+        }
+      : null;
 
-    // 🔍 Logs détaillés EmailJS
-    if (!r1.ok) console.error("EmailJS admin error:", r1.status, await r1.text());
-    if (!r2.ok) console.error("EmailJS client error:", r2.status, await r2.text());
+    // Envoi
+    const promises: Promise<Response>[] = [
+      fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadClient) }),
+    ];
+    if (payloadAdmin) {
+      promises.push(fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) }));
+    }
+    const results = await Promise.all(promises);
+    results.forEach(async (r, i) => {
+      if (!r.ok) {
+        console.error(`EmailJS ${i === 0 ? "client" : "admin"} error:`, r.status, await r.text());
+      }
+    });
 
     return NextResponse.json({
       ok: true,
       reservationId,
       totalChf: totalCHF,
       reservedUnits: afterReserved,
+      cancelUrl,
     });
   } catch (e: any) {
     console.error("🔥 Erreur /api/reservations:", e);
     return NextResponse.json({ error: e?.message ?? "Erreur serveur" }, { status: 500 });
   }
+}
+
+// Petit générateur de token
+function cryptoRandom(len = 24) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
+  return out;
 }
