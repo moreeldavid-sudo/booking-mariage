@@ -1,3 +1,4 @@
+// components/LodgingCard.tsx
 "use client";
 
 import Image from "next/image";
@@ -6,7 +7,7 @@ export type Lodging = {
   id: string;
   name: string;
   description?: string;
-  imageUrl?: string; // ex: "/tipi.jpg"
+  imageUrl?: string;
   totalUnits?: number;
   reservedUnits?: number;
   type?: "double_140" | "twin_90" | string;
@@ -31,7 +32,7 @@ export default function LodgingCard({
   const remaining = Math.max(total - reserved, 0);
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
+    <div className="h-full rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
       {/* Image */}
       <div className="relative h-48 w-full">
         <Image
@@ -77,24 +78,26 @@ export default function LodgingCard({
           </span>
         </div>
 
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="text-xs text-gray-500">
           Prix identique pour lit 140 cm et 2×90 cm.
         </div>
 
-        {/* Action */}
-        {onReserve && (
-          <button
-            onClick={() => onReserve(lodging)}
-            disabled={remaining <= 0}
-            className={`mt-2 rounded-xl px-4 py-2 text-sm text-white transition ${
-              remaining > 0
-                ? "bg-black hover:bg-gray-800"
-                : "bg-gray-400 cursor-not-allowed"
-            }`}
-          >
-            {ctaLabel}
-          </button>
-        )}
+        {/* Pousser le CTA en bas pour aligner les boutons entre cartes */}
+        <div className="mt-auto">
+          {onReserve && (
+            <button
+              onClick={() => onReserve(lodging)}
+              disabled={remaining <= 0}
+              className={`mt-2 w-full rounded-xl px-4 py-2 text-sm text-white transition ${
+                remaining > 0
+                  ? "bg-black hover:bg-gray-800"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {ctaLabel}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
