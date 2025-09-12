@@ -14,21 +14,26 @@ type Reservation = {
   createdAt: number;
 };
 
+type Stock = {
+  tipi140: number;
+  tipi90: number;
+};
+
 export default function AdminPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [stock, setStock] = useState<Stock | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function fetchReservations() {
-    try {
-      const res = await fetch("/api/admin/reservations");
-      if (!res.ok) throw new Error("Erreur API");
-      const data = await res.json();
-      setReservations(data.items || []);
-    } catch (err) {
-      console.error("Erreur fetch reservations:", err);
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch("/api/admin/reservations");
+    const data = await res.json();
+    setReservations(data.items || []);
+  }
+
+  async function fetchStock() {
+    const res = await fetch("/api/stock");
+    const data = await res.json();
+    setStock(data);
   }
 
   async function markPaid(id: string) {
@@ -44,15 +49,28 @@ export default function AdminPage() {
     if (!confirm("Annuler cette réservation ?")) return;
     await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
     fetchReservations();
+    fetchStock(); // mettre à jour les compteurs
   }
 
   useEffect(() => {
     fetchReservations();
+    fetchStock();
   }, []);
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-3xl font-bold">Admin — Réservations</h1>
+
+      {stock && (
+        <div className="flex space-x-6 text-lg">
+          <div>
+            <strong>Tipis lit 140 :</strong> {stock.tipi140} restants
+          </div>
+          <div>
+            <strong>Tipis lits 90 :</strong> {stock.tipi90} restants
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p>Chargement…</p>
