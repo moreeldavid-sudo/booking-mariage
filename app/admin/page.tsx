@@ -11,7 +11,7 @@ type Reservation = {
   email: string;
   totalCHF: number;
   paymentStatus: string;
-  createdAt: number;
+  createdAt: number; // ms epoch
 };
 
 type Stock = {
@@ -33,7 +33,6 @@ export default function AdminPage() {
   async function fetchStock() {
     const res = await fetch("/api/stock");
     const data = await res.json();
-    // Adapter aux clés renvoyées par l’API
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
       tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
@@ -53,7 +52,7 @@ export default function AdminPage() {
     if (!confirm("Annuler cette réservation ?")) return;
     await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
     fetchReservations();
-    fetchStock(); // mettre à jour les compteurs
+    fetchStock(); // mise à jour compteurs
   }
 
   useEffect(() => {
@@ -62,12 +61,73 @@ export default function AdminPage() {
     );
   }, []);
 
+  // ===== Export CSV (séparateur ; pour Excel FR/CH) =====
+  function csvEscape(val: unknown) {
+    const s = String(val ?? "");
+    // double the quotes and wrap in quotes
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  function formatDate(ms: number) {
+    try {
+      return new Date(ms).toLocaleString("fr-CH");
+    } catch {
+      return "";
+    }
+  }
+  function exportCSV() {
+    const headers = [
+      "ID",
+      "Nom",
+      "Email",
+      "Logement",
+      "Qté",
+      "Total CHF",
+      "Paiement",
+      "Créée",
+    ];
+    const rows = reservations.map((r) => [
+      r.id,
+      r.name,
+      r.email,
+      r.lodgingName ?? "",
+      String(r.qty),
+      String(r.totalCHF),
+      r.paymentStatus,
+      formatDate(r.createdAt),
+    ]);
+    const sep = ";";
+    const csv =
+      headers.map(csvEscape).join(sep) +
+      "\n" +
+      rows.map((row) => row.map(csvEscape).join(sep)).join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    a.href = url;
+    a.download = `reservations-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Admin — Réservations</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-3xl font-bold">Admin — Réservations</h1>
+        <button
+          onClick={exportCSV}
+          className="px-3 py-2 rounded bg-black text-white"
+          title="Exporter toutes les réservations en CSV"
+        >
+          Exporter CSV
+        </button>
+      </div>
 
       {stock && (
-        <div className="flex space-x-6 text-lg">
+        <div className="flex flex-wrap gap-6 text-lg">
           <div>
             <strong>Tipis lit 140 :</strong> {stock.tipi140} restants
           </div>
@@ -85,14 +145,14 @@ export default function AdminPage() {
         <table className="min-w-full border border-gray-300">
           <thead className="bg-gray-100">
             <tr>
-              <th className="border px-2 py-1">Nom</th>
-              <th className="border px-2 py-1">Email</th>
-              <th className="border px-2 py-1">Logement</th>
-              <th className="border px-2 py-1">Qté</th>
-              <th className="border px-2 py-1">Total CHF</th>
-              <th className="border px-2 py-1">Paiement</th>
-              <th className="border px-2 py-1">Créée</th>
-              <th className="border px-2 py-1">Actions</th>
+              <th className="border px-2 py-1 text-left">Nom</th>
+              <th className="border px-2 py-1 text-left">Email</th>
+              <th className="border px-2 py-1 text-left">Logement</th>
+              <th className="border px-2 py-1 text-right">Qté</th>
+              <th className="border px-2 py-1 text-right">Total CHF</th>
+              <th className="border px-2 py-1 text-left">Paiement</th>
+              <th className="border px-2 py-1 text-left">Créée</th>
+              <th className="border px-2 py-1 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -101,8 +161,8 @@ export default function AdminPage() {
                 <td className="border px-2 py-1">{r.name}</td>
                 <td className="border px-2 py-1">{r.email}</td>
                 <td className="border px-2 py-1">{r.lodgingName}</td>
-                <td className="border px-2 py-1">{r.qty}</td>
-                <td className="border px-2 py-1">{r.totalCHF}</td>
+                <td className="border px-2 py-1 text-right">{r.qty}</td>
+                <td className="border px-2 py-1 text-right">{r.totalCHF}</td>
                 <td
                   className={`border px-2 py-1 ${
                     r.paymentStatus === "paid"
@@ -113,7 +173,7 @@ export default function AdminPage() {
                   {r.paymentStatus}
                 </td>
                 <td className="border px-2 py-1">
-                  {new Date(r.createdAt).toLocaleString("fr-CH")}
+                  {formatDate(r.createdAt)}
                 </td>
                 <td className="border px-2 py-1 space-x-2">
                   {r.paymentStatus !== "paid" && (
