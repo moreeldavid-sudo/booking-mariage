@@ -1,57 +1,47 @@
 // app/api/admin/recount/route.ts
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 
+const EXPECTED_TOKEN = process.env.ADMIN_RESET_TOKEN || process.env.ADMIN_SECRET_TOKEN;
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const token = url.searchParams.get("token");
-
-  // Sécurité : token admin
-  if (token !== process.env.ADMIN_RESET_TOKEN) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const token = url.searchParams.get("token") || "";
+  if (!EXPECTED_TOKEN || token !== EXPECTED_TOKEN) {
+    return NextResponse.json({ error: "Token invalide." }, { status: 401 });
   }
 
-  try {
-    const db = getAdminDb();
+  const db = getAdminDb();
 
-    // 1) Récupérer toutes les réservations confirmées
-    const reservationsSnap = await db
-      .collection("reservations")
-      .where("status", "==", "confirmed")
-      .get();
+  // 1) Récupère toutes les réservations confirmées (non annulées)
+  const snap = await db.collection("reservations").get();
+  const counts: Record<string, number> = {};
+  snap.forEach((doc) => {
+    const d = doc.data() as any;
+    const status = d.status;
+    const qty = Number(d.qty) || 0;
+    if (status !== "cancelled" && qty > 0 && d.lodgingId) {
+      counts[d.lodgingId] = (counts[d.lodgingId] || 0) + qty;
+    }
+  });
 
-    // 2) Additionner par lodgingId (en lisant bien "qty")
-    const counts: Record<string, number> = {};
-    reservationsSnap.forEach((doc) => {
-      const data = doc.data() as any;
-      const lodgingId = String(data.lodgingId || "");
-      const qty = Number(data.qty ?? data.quantity ?? 0); // ← CORRECTION ICI
+  // 2) Applique les compteurs
+  const batch = db.batch();
+  Object.entries(counts).forEach(([lodgingId, reservedUnits]) => {
+    batch.set(db.collection("lodgings").doc(lodgingId), { reservedUnits }, { merge: true });
+  });
 
-      if (!lodgingId) return;
-      if (!Number.isFinite(qty)) return;
+  // S’assure que les autres lodgings non présents retombent à 0
+  const lodgingsSnap = await db.collection("lodgings").get();
+  lodgingsSnap.forEach((doc) => {
+    if (!counts[doc.id]) {
+      batch.set(doc.ref, { reservedUnits: 0 }, { merge: true });
+    }
+  });
 
-      counts[lodgingId] = (counts[lodgingId] || 0) + qty;
-    });
+  await batch.commit();
 
-    // 3) Mettre à jour chaque lodging.reservedUnits
-    const lodgingsSnap = await db.collection("lodgings").get();
-    const batch = db.batch();
-
-    lodgingsSnap.forEach((doc) => {
-      const id = doc.id;
-      const reservedUnits = counts[id] || 0; // ceux non présents repassent à 0
-      batch.update(doc.ref, { reservedUnits });
-    });
-
-    await batch.commit();
-
-    return NextResponse.json({
-      ok: true,
-      computed: counts,
-      confirmedCount: reservationsSnap.size,
-    });
-  } catch (err) {
-    console.error("Erreur recount:", err);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
-  }
+  return NextResponse.json({ ok: true, computed: counts });
 }
