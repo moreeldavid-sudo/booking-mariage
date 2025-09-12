@@ -33,7 +33,11 @@ export default function AdminPage() {
   async function fetchStock() {
     const res = await fetch("/api/stock");
     const data = await res.json();
-    setStock(data);
+    // Correction : lire les .remaining
+    setStock({
+      tipi140: Number(data?.["tipis-lit140"]?.remaining ?? 0),
+      tipi90: Number(data?.["tipis-lits90"]?.remaining ?? 0),
+    });
   }
 
   async function markPaid(id: string) {
@@ -53,8 +57,9 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    fetchReservations();
-    fetchStock();
+    Promise.all([fetchReservations(), fetchStock()]).then(() =>
+      setLoading(false)
+    );
   }, []);
 
   return (
@@ -100,7 +105,9 @@ export default function AdminPage() {
                 <td className="border px-2 py-1">{r.totalCHF}</td>
                 <td
                   className={`border px-2 py-1 ${
-                    r.paymentStatus === "paid" ? "text-green-600" : "text-red-600"
+                    r.paymentStatus === "paid"
+                      ? "text-green-600"
+                      : "text-red-600"
                   }`}
                 >
                   {r.paymentStatus}
