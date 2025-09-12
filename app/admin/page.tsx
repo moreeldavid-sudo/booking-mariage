@@ -68,6 +68,11 @@ export default function AdminPage() {
     alert("Compteurs remis à 0.");
   }
 
+  async function logout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    window.location.href = "/admin/login";
+  }
+
   useEffect(() => {
     Promise.all([fetchReservations(), fetchStock()]).then(() =>
       setLoading(false)
@@ -140,6 +145,13 @@ export default function AdminPage() {
             title="Remettre reservedUnits à 0 pour tous les logements"
           >
             Réinitialiser compteurs
+          </button>
+          <button
+            onClick={logout}
+            className="px-3 py-2 rounded bg-gray-500 text-white"
+            title="Se déconnecter de l’espace admin"
+          >
+            Déconnexion
           </button>
         </div>
       </div>
