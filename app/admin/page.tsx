@@ -55,6 +55,19 @@ export default function AdminPage() {
     fetchStock(); // mise à jour compteurs
   }
 
+  async function resetCounters() {
+    if (!confirm("Remettre tous les compteurs à 0 ?")) return;
+    const res = await fetch("/api/admin/stock/reset", { method: "POST" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || "Erreur lors de la réinitialisation");
+      return;
+    }
+    await fetchStock();
+    await fetchReservations();
+    alert("Compteurs remis à 0.");
+  }
+
   useEffect(() => {
     Promise.all([fetchReservations(), fetchStock()]).then(() =>
       setLoading(false)
@@ -80,39 +93,27 @@ export default function AdminPage() {
     return s;
   }
   function exportCSV() {
-    const headers = [
-      "No",        // numéro de ligne
-      "Nom",
-      "Email",
-      "Logement",
-      "Qte",       // sans accent pour Excel
-      "Total CHF",
-      "Paiement",  // avec accent (BOM UTF-8 géré)
-      "Date",
-    ];
+    const headers = ["No", "Nom", "Email", "Logement", "Qte", "Total CHF", "Paiement", "Date"];
     const rows = reservations.map((r, i) => [
-      String(i + 1),               // numéro lisible
+      String(i + 1),
       r.name,
       r.email,
       r.lodgingName ?? "",
       String(r.qty),
       String(r.totalCHF),
-      statusFr(r.paymentStatus),   // FR
-      formatDate(r.createdAt),     // lisible
+      statusFr(r.paymentStatus),
+      formatDate(r.createdAt),
     ]);
     const sep = ";";
     const csvBody =
       headers.map(csvEscape).join(sep) +
       "\n" +
       rows.map((row) => row.map(csvEscape).join(sep)).join("\n");
-
-    // BOM UTF-8 pour qu’Excel détecte bien l’encodage et affiche les accents
     const BOM = "\uFEFF";
     const blob = new Blob([BOM + csvBody], { type: "text/csv;charset=utf-8" });
-
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
     a.download = `reservations-${stamp}.csv`;
     document.body.appendChild(a);
@@ -125,13 +126,22 @@ export default function AdminPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-bold">Admin — Réservations</h1>
-        <button
-          onClick={exportCSV}
-          className="px-3 py-2 rounded bg-black text-white"
-          title="Exporter toutes les réservations en CSV"
-        >
-          Exporter CSV
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={exportCSV}
+            className="px-3 py-2 rounded bg-black text-white"
+            title="Exporter toutes les réservations en CSV"
+          >
+            Exporter CSV
+          </button>
+          <button
+            onClick={resetCounters}
+            className="px-3 py-2 rounded bg-gray-700 text-white"
+            title="Remettre reservedUnits à 0 pour tous les logements"
+          >
+            Réinitialiser compteurs
+          </button>
+        </div>
       </div>
 
       {stock && (
@@ -180,12 +190,9 @@ export default function AdminPage() {
                       : "text-red-600"
                   }`}
                 >
-                  {/* on garde l'anglais dans l'UI pour l’instant, mais dis-moi si tu veux FR ici aussi */}
                   {r.paymentStatus}
                 </td>
-                <td className="border px-2 py-1">
-                  {formatDate(r.createdAt)}
-                </td>
+                <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
                 <td className="border px-2 py-1 space-x-2">
                   {r.paymentStatus !== "paid" && (
                     <button
