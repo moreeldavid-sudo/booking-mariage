@@ -61,7 +61,7 @@ export default function AdminPage() {
     );
   }, []);
 
-  // ===== Export CSV (séparateur ; pour Excel FR/CH, en-têtes SANS accents, BOM UTF-8) =====
+  // ===== Helpers export CSV =====
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -73,26 +73,32 @@ export default function AdminPage() {
       return "";
     }
   }
+  function statusFr(s: string) {
+    if (s === "paid") return "Payé";
+    if (s === "pending") return "En attente de paiement";
+    if (s === "cancelled") return "Annulée";
+    return s;
+  }
   function exportCSV() {
     const headers = [
-      "ID",
+      "No",        // numéro de ligne
       "Nom",
       "Email",
       "Logement",
-      "Qte",        // <- sans accent
+      "Qte",       // sans accent pour Excel
       "Total CHF",
-      "Paiement",
-      "Creee",      // <- sans accent
+      "Paiement",  // avec accent (BOM UTF-8 géré)
+      "Date",
     ];
-    const rows = reservations.map((r) => [
-      r.id,
+    const rows = reservations.map((r, i) => [
+      String(i + 1),               // numéro lisible
       r.name,
       r.email,
       r.lodgingName ?? "",
       String(r.qty),
       String(r.totalCHF),
-      r.paymentStatus,
-      formatDate(r.createdAt),
+      statusFr(r.paymentStatus),   // FR
+      formatDate(r.createdAt),     // lisible
     ]);
     const sep = ";";
     const csvBody =
@@ -100,7 +106,7 @@ export default function AdminPage() {
       "\n" +
       rows.map((row) => row.map(csvEscape).join(sep)).join("\n");
 
-    // BOM UTF-8 pour qu’Excel détecte bien l’encodage
+    // BOM UTF-8 pour qu’Excel détecte bien l’encodage et affiche les accents
     const BOM = "\uFEFF";
     const blob = new Blob([BOM + csvBody], { type: "text/csv;charset=utf-8" });
 
@@ -169,9 +175,12 @@ export default function AdminPage() {
                   className={`border px-2 py-1 ${
                     r.paymentStatus === "paid"
                       ? "text-green-600"
+                      : r.paymentStatus === "pending"
+                      ? "text-amber-700"
                       : "text-red-600"
                   }`}
                 >
+                  {/* on garde l'anglais dans l'UI pour l’instant, mais dis-moi si tu veux FR ici aussi */}
                   {r.paymentStatus}
                 </td>
                 <td className="border px-2 py-1">
