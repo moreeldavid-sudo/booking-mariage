@@ -74,7 +74,7 @@ export default function AdminPage() {
     );
   }, []);
 
-  // ===== Helpers export CSV =====
+  // ===== Helpers export & affichage =====
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -166,7 +166,7 @@ export default function AdminPage() {
               <th className="border px-2 py-1 text-left">Nom</th>
               <th className="border px-2 py-1 text-left">Email</th>
               <th className="border px-2 py-1 text-left">Logement</th>
-              <th className="border px-2 py-1 text-right">Qté</th>
+              <th className="border px-2 py-1 text-right">Qte</th>
               <th className="border px-2 py-1 text-right">Total CHF</th>
               <th className="border px-2 py-1 text-left">Paiement</th>
               <th className="border px-2 py-1 text-left">Créée</th>
@@ -190,7 +190,7 @@ export default function AdminPage() {
                       : "text-red-600"
                   }`}
                 >
-                  {r.paymentStatus}
+                  {statusFr(r.paymentStatus)}
                 </td>
                 <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
                 <td className="border px-2 py-1 space-x-2">
