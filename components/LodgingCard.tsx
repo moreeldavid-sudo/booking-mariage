@@ -32,8 +32,8 @@ export default function LodgingCard({
   const isFull = remaining <= 0;
 
   return (
-    // 👉 On force la police des cartes en Inter (comme « avant »)
-    <div className="font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
+    /* Ajout de la classe lodging-card pour augmenter la taille UNIQUEMENT ici */
+    <div className="lodging-card font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
       {/* Image */}
       <div className="relative h-56 w-full md:h-64">
         <Image
@@ -48,7 +48,7 @@ export default function LodgingCard({
       {/* Contenu */}
       <div className="p-6 flex-1 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
-          {/* Titre — style Inter, lisible comme avant */}
+          {/* Titre */}
           <h3 className="text-xl md:text-2xl font-semibold leading-snug tracking-tight text-slate-900">
             {lodging.name}
           </h3>
@@ -75,7 +75,7 @@ export default function LodgingCard({
           </p>
         )}
 
-        {/* Prix (badge gris arrondi, comme avant) */}
+        {/* Prix */}
         <div className="mt-1">
           <span className="inline-flex items-center gap-3 text-sm md:text-base">
             <span className="px-4 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold">
