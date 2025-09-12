@@ -9,36 +9,8 @@ body {
   margin: 0;
   padding: 0;
 
-  /* 📱 Taille par défaut (mobile) */
-  font-size: 1.2rem;   /* ~19px */
+  font-size: 16px;   /* Taille normale */
   line-height: 1.5;
-}
-
-/* 💻 Écrans moyens (tablettes) */
-@media (min-width: 768px) {
-  body {
-    font-size: 1.8rem;  /* ~28px */
-    line-height: 1.45;
-  }
-
-  h1, h2, h3 {
-    font-size: 3rem;    /* ~48px */
-    line-height: 1.2;
-  }
-}
-
-/* 🖥️ Grands écrans (desktop) */
-@media (min-width: 1280px) {
-  body {
-    font-size: 2.5rem;  /* ~40px */
-    line-height: 1.4;
-  }
-
-  h1, h2, h3 {
-    font-size: 5.5rem;  /* ~88px */
-    line-height: 1.1;
-    font-weight: 900;
-  }
 }
 
 /* --- éléments spécifiques --- */
@@ -105,4 +77,10 @@ body {
   inset: 0;
   background: rgba(255, 255, 255, 0.75);
   z-index: -1;
+}
+
+/* --- Police plus grande uniquement pour les cartes logements --- */
+.lodging-card {
+  font-size: 18px;
+  line-height: 1.4;
 }
