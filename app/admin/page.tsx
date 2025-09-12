@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Reservation = {
   id: string;
   lodgingName: string | null;
+  lodgingId: string;
   qty: number;
   name: string;
   email: string;
@@ -30,6 +31,21 @@ export default function AdminPage() {
     }
   }
 
+  async function markPaid(id: string) {
+    await fetch(`/api/admin/reservations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentStatus: "paid" }),
+    });
+    fetchReservations();
+  }
+
+  async function cancelReservation(id: string) {
+    if (!confirm("Annuler cette réservation ?")) return;
+    await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
+    fetchReservations();
+  }
+
   useEffect(() => {
     fetchReservations();
   }, []);
@@ -53,6 +69,7 @@ export default function AdminPage() {
               <th className="border px-2 py-1">Total CHF</th>
               <th className="border px-2 py-1">Paiement</th>
               <th className="border px-2 py-1">Créée</th>
+              <th className="border px-2 py-1">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +89,22 @@ export default function AdminPage() {
                 </td>
                 <td className="border px-2 py-1">
                   {new Date(r.createdAt).toLocaleString("fr-CH")}
+                </td>
+                <td className="border px-2 py-1 space-x-2">
+                  {r.paymentStatus !== "paid" && (
+                    <button
+                      className="px-2 py-1 bg-green-600 text-white rounded"
+                      onClick={() => markPaid(r.id)}
+                    >
+                      Marquer payé
+                    </button>
+                  )}
+                  <button
+                    className="px-2 py-1 bg-red-600 text-white rounded"
+                    onClick={() => cancelReservation(r.id)}
+                  >
+                    Annuler
+                  </button>
                 </td>
               </tr>
             ))}
