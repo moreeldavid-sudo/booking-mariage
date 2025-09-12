@@ -33,10 +33,10 @@ export default function AdminPage() {
   async function fetchStock() {
     const res = await fetch("/api/stock");
     const data = await res.json();
-    // Correction : lire les .remaining
+    // Adapter aux clés renvoyées par l’API
     setStock({
-      tipi140: Number(data?.["tipis-lit140"]?.remaining ?? 0),
-      tipi90: Number(data?.["tipis-lits90"]?.remaining ?? 0),
+      tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
+      tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
     });
   }
 
