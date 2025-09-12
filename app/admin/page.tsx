@@ -61,10 +61,9 @@ export default function AdminPage() {
     );
   }, []);
 
-  // ===== Export CSV (séparateur ; pour Excel FR/CH) =====
+  // ===== Export CSV (séparateur ; pour Excel FR/CH, en-têtes SANS accents, BOM UTF-8) =====
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
-    // double the quotes and wrap in quotes
     return `"${s.replace(/"/g, '""')}"`;
   }
   function formatDate(ms: number) {
@@ -80,10 +79,10 @@ export default function AdminPage() {
       "Nom",
       "Email",
       "Logement",
-      "Qté",
+      "Qte",        // <- sans accent
       "Total CHF",
       "Paiement",
-      "Créée",
+      "Creee",      // <- sans accent
     ];
     const rows = reservations.map((r) => [
       r.id,
@@ -96,12 +95,15 @@ export default function AdminPage() {
       formatDate(r.createdAt),
     ]);
     const sep = ";";
-    const csv =
+    const csvBody =
       headers.map(csvEscape).join(sep) +
       "\n" +
       rows.map((row) => row.map(csvEscape).join(sep)).join("\n");
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    // BOM UTF-8 pour qu’Excel détecte bien l’encodage
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvBody], { type: "text/csv;charset=utf-8" });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
