@@ -27,8 +27,9 @@ export async function middleware(req: NextRequest) {
 
   if (!isAdminArea(pathname)) return NextResponse.next();
 
-  // autoriser /admin/login sans cookie
+  // Autoriser la page et l’API de login sans cookie
   if (pathname.startsWith('/admin/login')) return NextResponse.next();
+  if (pathname.startsWith('/api/admin/login')) return NextResponse.next();
 
   const token = req.cookies.get(COOKIE_NAME)?.value || '';
   const pin = process.env.ADMIN_PIN || '';
