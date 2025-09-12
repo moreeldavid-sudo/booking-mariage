@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from "@/lib/constants";
+import { incrementReserved } from "@/lib/db";
 
 function absUrl(path: string) {
   const base =
@@ -37,21 +38,12 @@ export async function POST(req: NextRequest) {
     let afterReserved = 0;
     let lodgingData: any = null;
 
-    // Transaction
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(lodgingRef);
-      if (!snap.exists) throw new Error("Hébergement introuvable.");
-      const data = snap.data() as any;
-      lodgingData = data;
+    // Incrémente via fonction dédiée
+    lodgingData = (await lodgingRef.get()).data();
+    if (!lodgingData) throw new Error("Hébergement introuvable.");
 
-      const totalUnits: number = data.totalUnits ?? 0;
-      const reservedUnits: number = data.reservedUnits ?? 0;
-      const remaining = totalUnits - reservedUnits;
-      if (qty > remaining) throw new Error(`Plus que ${remaining} dispo.`);
-
-      afterReserved = reservedUnits + qty;
-      tx.update(lodgingRef, { reservedUnits: afterReserved });
-    });
+    await incrementReserved(lodgingId, qty);
+    afterReserved = (lodgingData.reservedUnits ?? 0) + qty;
 
     const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
     const totalCHF = unitPriceCHF * qty;
@@ -76,7 +68,9 @@ export async function POST(req: NextRequest) {
     });
 
     const reservationId = reservationDoc.id;
-    const cancelUrl = absUrl(`/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`);
+    const cancelUrl = absUrl(
+      `/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`
+    );
 
     // ---- EmailJS ----
     const endpoint = "https://api.emailjs.com/api/v1.0/email/send";
@@ -107,7 +101,9 @@ export async function POST(req: NextRequest) {
       template_params: {
         ...baseParams,
         to_email: email,
-        summary_line: `Réservation confirmée : ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF`,
+        summary_line: `Réservation confirmée : ${qty} ${
+          qty > 1 ? "tipis" : "tipi"
+        } — Total ${totalCHF} CHF`,
       },
     };
 
@@ -120,7 +116,9 @@ export async function POST(req: NextRequest) {
           template_params: {
             ...baseParams,
             to_email: admin_email,
-            summary_line: `Nouvelle réservation : ${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodgingData?.title ?? lodgingId} — Total ${totalCHF} CHF`,
+            summary_line: `Nouvelle réservation : ${qty} ${
+              qty > 1 ? "tipis" : "tipi"
+            } — ${lodgingData?.title ?? lodgingId} — Total ${totalCHF} CHF`,
           },
         }
       : null;
@@ -129,13 +127,19 @@ export async function POST(req: NextRequest) {
       fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadClient) }),
     ];
     if (payloadAdmin) {
-      promises.push(fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) }));
+      promises.push(
+        fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) })
+      );
     }
 
     const results = await Promise.all(promises);
     results.forEach(async (r, i) => {
       if (!r.ok) {
-        console.error(`EmailJS ${i === 0 ? "client" : "admin"} error:`, r.status, await r.text());
+        console.error(
+          `EmailJS ${i === 0 ? "client" : "admin"} error:`,
+          r.status,
+          await r.text()
+        );
       }
     });
 
@@ -148,13 +152,18 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("🔥 Erreur /api/reservations:", e);
-    return NextResponse.json({ error: e?.message ?? "Erreur serveur" }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message ?? "Erreur serveur" },
+      { status: 500 }
+    );
   }
 }
 
 function cryptoRandom(len = 24) {
-  const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const alphabet =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
+  for (let i = 0; i < len; i++)
+    out += alphabet[(Math.random() * alphabet.length) | 0];
   return out;
 }
