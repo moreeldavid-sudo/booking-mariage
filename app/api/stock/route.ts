@@ -1,30 +1,28 @@
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-
-const MAP: Record<"tipi140"|"tipi90", string> = {
-  tipi140: "tipis-lit140",
-  tipi90:  "tipis-lits90",
-};
 
 export async function GET() {
   try {
     const db = getAdminDb();
-    const [d140, d90] = await Promise.all([
-      db.collection("lodgings").doc(MAP.tipi140).get(),
-      db.collection("lodgings").doc(MAP.tipi90).get(),
-    ]);
+    const d140 = await db.collection("lodgings").doc("tipis-lit140").get();
+    const d90  = await db.collection("lodgings").doc("tipis-lits90").get();
 
-    const a140 = d140.data() || {};
-    const a90  = d90.data()  || {};
+    const a140 = d140.exists ? (d140.data() as any) : {};
+    const a90  = d90.exists  ? (d90.data() as any)  : {};
 
-    const remaining140 = Math.max(0, (a140.totalUnits ?? 0) - (a140.reservedUnits ?? 0));
-    const remaining90  = Math.max(0, (a90.totalUnits  ?? 0) - (a90.reservedUnits  ?? 0));
+    const remaining140 =
+      Number(a140.totalUnits ?? 0) - Number(a140.reservedUnits ?? 0);
+    const remaining90 =
+      Number(a90.totalUnits ?? 0) - Number(a90.reservedUnits ?? 0);
 
     return NextResponse.json({
-      tipi140: { remaining: remaining140 },
-      tipi90:  { remaining: remaining90  },
+      tipi140: { remaining: Math.max(0, remaining140) },
+      tipi90:  { remaining: Math.max(0, remaining90)  },
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message ?? "Erreur" }, { status: 500 });
+    console.error("GET /api/stock error:", e);
+    return NextResponse.json({ tipi140: { remaining: 0 }, tipi90: { remaining: 0 } }, { status: 500 });
   }
 }
