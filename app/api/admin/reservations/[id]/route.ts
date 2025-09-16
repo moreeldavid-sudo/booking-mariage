@@ -5,9 +5,18 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 
 /**
  * PATCH /api/admin/reservations/:id
- * Body: { paymentStatus?: "paid" | "pending", status?: "cancelled" | "confirmed" }
+ * Body (optionnel) :
+ *   - paymentStatus?: "paid" | "pending"
+ *   - status?: "confirmed" | "cancelled"
+ *
+ * Remarque :
+ *  - On utilise set(..., { merge: true }) pour éviter "No document to update"
+ *  - Si la réservation n'existe pas → 404
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = params.id;
     const body = await req.json().catch(() => ({}));
@@ -20,26 +29,34 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "reservation_not_found" }, { status: 404 });
     }
 
-    const payload: any = { updatedAt: new Date() };
-    if (paymentStatus) payload.paymentStatus = paymentStatus;
-    if (status) payload.status = status;
+    const payload: Record<string, unknown> = { updatedAt: new Date() };
+    if (typeof paymentStatus === "string") payload.paymentStatus = paymentStatus;
+    if (typeof status === "string") payload.status = status;
 
-    // set(..., {merge:true}) évite l'erreur "No document to update"
     await ref.set(payload, { merge: true });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("PATCH /api/admin/reservations/:id error:", e);
-    return NextResponse.json({ error: e?.message ?? "Erreur" }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message ?? "Erreur" },
+      { status: 500 }
+    );
   }
 }
 
 /**
  * DELETE /api/admin/reservations/:id
- * - Marque la réservation "cancelled"
- * - Remet le stock
+ *
+ * Effets :
+ *  - Remet le stock (lodgings.reservedUnits -= qty, min 0)
+ *  - Supprime définitivement le document de réservation
+ *  - Si la réservation n'existe pas → 404
  */
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = params.id;
     const db = getAdminDb();
@@ -50,22 +67,22 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
       if (!snap.exists) throw new Error("reservation_not_found");
 
       const data = snap.data() as any;
-      const lodgingId: string = data.lodgingId;
-      const qty: number = Number(data.qty ?? 0);
+      const lodgingId: string | undefined = data?.lodgingId;
+      const qty: number = Number(data?.qty ?? 0);
 
-      // 1) remettre le stock si possible
+      // 1) Remettre le stock si on a un lodgingId et une quantité valide
       if (lodgingId && qty > 0) {
         const lodgingRef = db.collection("lodgings").doc(lodgingId);
         const lodgingSnap = await tx.get(lodgingRef);
         if (lodgingSnap.exists) {
           const l = lodgingSnap.data() as any;
-          const reservedUnits = Number(l.reservedUnits ?? 0);
+          const reservedUnits = Number(l?.reservedUnits ?? 0);
           const newReserved = Math.max(0, reservedUnits - qty);
           tx.update(lodgingRef, { reservedUnits: newReserved });
         }
       }
 
-      // 2) supprimer la réservation (plus de retour possible au refresh)
+      // 2) Supprimer la réservation (définitif, elle ne reviendra pas après F5)
       tx.delete(ref);
     });
 
@@ -73,18 +90,9 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   } catch (e: any) {
     console.error("DELETE /api/admin/reservations/:id error:", e);
     const code = e?.message === "reservation_not_found" ? 404 : 500;
-    return NextResponse.json({ error: e?.message ?? "Erreur" }, { status: code });
-  }
-}
-
-      // garder l'historique -> status: cancelled
-      tx.set(ref, { status: "cancelled", updatedAt: new Date() }, { merge: true });
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    console.error("DELETE /api/admin/reservations/:id error:", e);
-    const code = e?.message === "reservation_not_found" ? 404 : 500;
-    return NextResponse.json({ error: e?.message ?? "Erreur" }, { status: code });
+    return NextResponse.json(
+      { error: e?.message ?? "Erreur" },
+      { status: code }
+    );
   }
 }
