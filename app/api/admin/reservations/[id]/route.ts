@@ -53,7 +53,7 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
       const lodgingId: string = data.lodgingId;
       const qty: number = Number(data.qty ?? 0);
 
-      // remettre le stock
+      // 1) remettre le stock si possible
       if (lodgingId && qty > 0) {
         const lodgingRef = db.collection("lodgings").doc(lodgingId);
         const lodgingSnap = await tx.get(lodgingRef);
@@ -64,6 +64,18 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
           tx.update(lodgingRef, { reservedUnits: newReserved });
         }
       }
+
+      // 2) supprimer la réservation (plus de retour possible au refresh)
+      tx.delete(ref);
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    console.error("DELETE /api/admin/reservations/:id error:", e);
+    const code = e?.message === "reservation_not_found" ? 404 : 500;
+    return NextResponse.json({ error: e?.message ?? "Erreur" }, { status: code });
+  }
+}
 
       // garder l'historique -> status: cancelled
       tx.set(ref, { status: "cancelled", updatedAt: new Date() }, { merge: true });
