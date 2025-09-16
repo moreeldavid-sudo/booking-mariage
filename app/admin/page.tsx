@@ -11,7 +11,8 @@ type Reservation = {
   email: string;
   totalCHF: number;
   paymentStatus: string;
-  createdAt: number; // ms epoch
+  status?: string;        // <— pour filtrer les annulées
+  createdAt: number;      // ms epoch
 };
 
 type Stock = {
@@ -27,7 +28,11 @@ export default function AdminPage() {
   async function fetchReservations() {
     const res = await fetch("/api/admin/reservations");
     const data = await res.json();
-    setReservations(data.items || []);
+    // ne garder que les non-annulées
+    const items: Reservation[] = (data.items || []).filter(
+      (r: Reservation) => (r.status || "confirmed") !== "cancelled"
+    );
+    setReservations(items);
   }
 
   async function fetchStock() {
@@ -40,19 +45,29 @@ export default function AdminPage() {
   }
 
   async function markPaid(id: string) {
-    await fetch(`/api/admin/reservations/${id}`, {
+    const ok = await fetch(`/api/admin/reservations/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentStatus: "paid" }),
-    });
-    fetchReservations();
+    }).then(r => r.ok);
+
+    if (!ok) return alert("Impossible de marquer payé.");
+    // maj immédiate de l’UI
+    setReservations(prev =>
+      prev.map(r => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
+    );
   }
 
   async function cancelReservation(id: string) {
     if (!confirm("Annuler cette réservation ?")) return;
-    await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
-    fetchReservations();
-    fetchStock(); // mise à jour compteurs
+    const ok = await fetch(`/api/admin/reservations/${id}`, {
+      method: "DELETE",
+    }).then(r => r.ok);
+
+    if (!ok) return alert("Impossible d’annuler.");
+    // retirer la ligne tout de suite + MAJ compteurs
+    setReservations(prev => prev.filter(r => r.id !== id));
+    fetchStock();
   }
 
   async function resetCounters() {
@@ -64,7 +79,6 @@ export default function AdminPage() {
       return;
     }
     await fetchStock();
-    await fetchReservations();
     alert("Compteurs remis à 0.");
   }
 
