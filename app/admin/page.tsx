@@ -25,7 +25,6 @@ export default function AdminPage() {
 
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
-    console.log("[admin] fetchReservations:", url);
     const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
@@ -37,7 +36,6 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
-    console.log("[admin] reservations payload:", data);
     const items: Reservation[] = (data.items || []).filter(
       (r: Reservation) => (r.status || "confirmed") !== "cancelled"
     );
@@ -46,7 +44,6 @@ export default function AdminPage() {
 
   async function fetchStock() {
     const url = `/api/stock?ts=${Date.now()}`;
-    console.log("[admin] fetchStock:", url);
     const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
@@ -58,7 +55,6 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
-    console.log("[admin] stock payload:", data);
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
       tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
@@ -89,17 +85,32 @@ export default function AdminPage() {
 
   async function cancelReservation(id: string) {
     if (!confirm("Annuler cette réservation ?")) return;
+
     setRowLoading(id);
+
+    // 1) Suppression optimiste immédiate
+    const prev = reservations;
+    setReservations(prev.filter((r) => r.id !== id));
+
     try {
-      const res = await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
-      const txt = await res.text().catch(() => "");
-      console.log("[admin] DELETE result:", res.status, txt || "<no body>");
+      // 2) Appel API (idempotente côté serveur)
+      const res = await fetch(`/api/admin/reservations/${id}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { "cache-control": "no-cache" },
+      });
 
-      // Retirer immédiatement de l’UI
-      setReservations((prev) => prev.filter((r) => r.id !== id));
-
-      // Re-synchroniser depuis la base (évite le “revient après F5”)
+      // 3) Re-sync depuis la base (évite qu’elle “revienne” après F5)
       await Promise.all([fetchReservations(), fetchStock()]);
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        alert(`Erreur annulation (${res.status})\n${txt}\nLa liste a été resynchronisée.`);
+      }
+    } catch (e) {
+      // 4) En cas d’erreur réseau : on restaure l’ancienne UI et on alerte
+      setReservations(prev);
+      alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
       setRowLoading(null);
     }
