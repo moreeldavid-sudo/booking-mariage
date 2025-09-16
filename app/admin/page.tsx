@@ -21,13 +21,23 @@ export default function AdminPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [stock, setStock] = useState<Stock | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rowLoading, setRowLoading] = useState<string | null>(null); // id en action
 
   async function fetchReservations() {
-    const res = await fetch(`/api/admin/reservations?ts=${Date.now()}`, {
+    const url = `/api/admin/reservations?ts=${Date.now()}`;
+    console.log("[admin] fetchReservations:", url);
+    const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
     });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      alert(`Erreur chargement réservations (${res.status})\n${txt}`);
+      setReservations([]);
+      return;
+    }
     const data = await res.json();
+    console.log("[admin] reservations payload:", data);
     const items: Reservation[] = (data.items || []).filter(
       (r: Reservation) => (r.status || "confirmed") !== "cancelled"
     );
@@ -35,11 +45,20 @@ export default function AdminPage() {
   }
 
   async function fetchStock() {
-    const res = await fetch(`/api/stock?ts=${Date.now()}`, {
+    const url = `/api/stock?ts=${Date.now()}`;
+    console.log("[admin] fetchStock:", url);
+    const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
     });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      alert(`Erreur chargement stock (${res.status})\n${txt}`);
+      setStock({ tipi140: 0, tipi90: 0 });
+      return;
+    }
     const data = await res.json();
+    console.log("[admin] stock payload:", data);
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
       tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
@@ -47,41 +66,51 @@ export default function AdminPage() {
   }
 
   async function markPaid(id: string) {
-    const ok = await fetch(`/api/admin/reservations/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentStatus: "paid" }),
-    }).then((r) => r.ok);
-    if (!ok) return alert("Impossible de marquer payé (réservation introuvable).");
-
-    // MAJ immédiate
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
-    );
+    setRowLoading(id);
+    try {
+      const res = await fetch(`/api/admin/reservations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: "paid" }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        alert(`Erreur marquer payé (${res.status})\n${txt}`);
+        return;
+      }
+      // MAJ immédiate
+      setReservations((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
+      );
+    } finally {
+      setRowLoading(null);
+    }
   }
 
   async function cancelReservation(id: string) {
     if (!confirm("Annuler cette réservation ?")) return;
-
+    setRowLoading(id);
     try {
-      // L’API DELETE est idempotente : même si la résa n’existe plus, elle renvoie ok
-      await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
-    } catch {
-      // on ignore les erreurs réseau ponctuelles
-    }
+      const res = await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
+      const txt = await res.text().catch(() => "");
+      console.log("[admin] DELETE result:", res.status, txt || "<no body>");
 
-    // Retirer tout de suite de l’UI, puis resynchroniser avec la base
-    setReservations((prev) => prev.filter((r) => r.id !== id));
-    await fetchStock();
-    await fetchReservations();
+      // Retirer immédiatement de l’UI
+      setReservations((prev) => prev.filter((r) => r.id !== id));
+
+      // Re-synchroniser depuis la base (évite le “revient après F5”)
+      await Promise.all([fetchReservations(), fetchStock()]);
+    } finally {
+      setRowLoading(null);
+    }
   }
 
   async function resetCounters() {
     if (!confirm("Remettre tous les compteurs à 0 ?")) return;
     const res = await fetch("/api/admin/stock/reset", { method: "POST" });
     if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      alert(j.error || "Erreur lors de la réinitialisation");
+      const txt = await res.text().catch(() => "");
+      alert(`Erreur réinitialisation (${res.status})\n${txt}`);
       return;
     }
     await fetchStock();
@@ -161,6 +190,13 @@ export default function AdminPage() {
           <button onClick={logout} className="px-3 py-2 rounded bg-gray-500 text-white">
             Déconnexion
           </button>
+          <button
+            onClick={() => Promise.all([fetchReservations(), fetchStock()])}
+            className="px-3 py-2 rounded bg-gray-200"
+            title="Rafraîchir manuellement les données"
+          >
+            Rafraîchir
+          </button>
         </div>
       </div>
 
@@ -194,43 +230,50 @@ export default function AdminPage() {
             </tr>
           </thead>
           <tbody>
-            {reservations.map((r) => (
-              <tr key={r.id}>
-                <td className="border px-2 py-1">{r.name}</td>
-                <td className="border px-2 py-1">{r.email}</td>
-                <td className="border px-2 py-1">{r.lodgingName}</td>
-                <td className="border px-2 py-1 text-right">{r.qty}</td>
-                <td className="border px-2 py-1 text-right">{r.totalCHF}</td>
-                <td
-                  className={`border px-2 py-1 ${
-                    r.paymentStatus === "paid"
-                      ? "text-green-600"
-                      : r.paymentStatus === "pending"
-                      ? "text-amber-700"
-                      : "text-red-600"
-                  }`}
-                >
-                  {statusFr(r.paymentStatus)}
-                </td>
-                <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
-                <td className="border px-2 py-1 space-x-2">
-                  {r.paymentStatus !== "paid" && (
-                    <button
-                      className="px-2 py-1 bg-green-600 text-white rounded"
-                      onClick={() => markPaid(r.id)}
-                    >
-                      Marquer payé
-                    </button>
-                  )}
-                  <button
-                    className="px-2 py-1 bg-red-600 text-white rounded"
-                    onClick={() => cancelReservation(r.id)}
+            {reservations.map((r) => {
+              const isBusy = rowLoading === r.id;
+              return (
+                <tr key={r.id} className={isBusy ? "opacity-60 pointer-events-none" : ""}>
+                  <td className="border px-2 py-1">{r.name}</td>
+                  <td className="border px-2 py-1">{r.email}</td>
+                  <td className="border px-2 py-1">{r.lodgingName}</td>
+                  <td className="border px-2 py-1 text-right">{r.qty}</td>
+                  <td className="border px-2 py-1 text-right">{r.totalCHF}</td>
+                  <td
+                    className={`border px-2 py-1 ${
+                      r.paymentStatus === "paid"
+                        ? "text-green-600"
+                        : r.paymentStatus === "pending"
+                        ? "text-amber-700"
+                        : "text-red-600"
+                    }`}
                   >
-                    Annuler
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    {statusFr(r.paymentStatus)}
+                  </td>
+                  <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
+                  <td className="border px-2 py-1 space-x-2">
+                    {r.paymentStatus !== "paid" && (
+                      <button
+                        type="button"
+                        className="px-2 py-1 bg-green-600 text-white rounded"
+                        onClick={() => markPaid(r.id)}
+                        disabled={isBusy}
+                      >
+                        Marquer payé
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="px-2 py-1 bg-red-600 text-white rounded"
+                      onClick={() => cancelReservation(r.id)}
+                      disabled={isBusy}
+                    >
+                      Annuler
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
