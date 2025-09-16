@@ -53,6 +53,7 @@ export default function AdminPage() {
       body: JSON.stringify({ paymentStatus: "paid" }),
     }).then((r) => r.ok);
     if (!ok) return alert("Impossible de marquer payé (réservation introuvable).");
+
     // MAJ immédiate
     setReservations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
@@ -61,14 +62,18 @@ export default function AdminPage() {
 
   async function cancelReservation(id: string) {
     if (!confirm("Annuler cette réservation ?")) return;
-    const ok = await fetch(`/api/admin/reservations/${id}`, {
-      method: "DELETE",
-    }).then((r) => r.ok);
-    if (!ok) return alert("Impossible d'annuler (réservation introuvable).");
 
-    // Retirer tout de suite + mettre à jour les compteurs
+    try {
+      // L’API DELETE est idempotente : même si la résa n’existe plus, elle renvoie ok
+      await fetch(`/api/admin/reservations/${id}`, { method: "DELETE" });
+    } catch {
+      // on ignore les erreurs réseau ponctuelles
+    }
+
+    // Retirer tout de suite de l’UI, puis resynchroniser avec la base
     setReservations((prev) => prev.filter((r) => r.id !== id));
-    fetchStock();
+    await fetchStock();
+    await fetchReservations();
   }
 
   async function resetCounters() {
@@ -196,13 +201,15 @@ export default function AdminPage() {
                 <td className="border px-2 py-1">{r.lodgingName}</td>
                 <td className="border px-2 py-1 text-right">{r.qty}</td>
                 <td className="border px-2 py-1 text-right">{r.totalCHF}</td>
-                <td className={`border px-2 py-1 ${
+                <td
+                  className={`border px-2 py-1 ${
                     r.paymentStatus === "paid"
                       ? "text-green-600"
                       : r.paymentStatus === "pending"
                       ? "text-amber-700"
                       : "text-red-600"
-                  }`}>
+                  }`}
+                >
                   {statusFr(r.paymentStatus)}
                 </td>
                 <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
