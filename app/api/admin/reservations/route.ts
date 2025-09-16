@@ -4,12 +4,9 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 
 function toMs(createdAt: any): number {
-  // Accepte Timestamp Firestore, Date, number, string
   try {
     if (!createdAt) return Date.now();
-    if (typeof createdAt?.toDate === "function") {
-      return createdAt.toDate().getTime();
-    }
+    if (typeof createdAt?.toDate === "function") return createdAt.toDate().getTime();
     if (createdAt instanceof Date) return createdAt.getTime();
     if (typeof createdAt === "number") return createdAt;
     const d = new Date(createdAt);
@@ -22,7 +19,7 @@ export async function GET() {
   try {
     const db = getAdminDb();
 
-    // ⚠️ on évite orderBy pour lever tout risque d’index/field manquant
+    // On évite orderBy côté Firestore (pas d’index requis), on trie après
     const snap = await db.collection("reservations").get();
 
     const items = snap.docs.map((d) => {
@@ -32,9 +29,7 @@ export async function GET() {
         lodgingId: data.lodgingId ?? null,
         lodgingName: data.lodgingName ?? null,
         qty: Number(data.qty ?? 0),
-        name:
-          data.name ??
-          `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim(),
+        name: data.name ?? `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim(),
         email: data.email ?? "",
         totalCHF: Number(data.totalCHF ?? 0),
         paymentStatus: data.paymentStatus ?? "pending",
@@ -43,18 +38,22 @@ export async function GET() {
       };
     });
 
-    // On trie côté serveur (desc)
+    // Tri desc par date
     items.sort((a, b) => b.createdAt - a.createdAt);
 
-    // On masque les annulées dans l’UI
+    // (Option) On masque les annulées ici si tu veux les cacher en admin :
     const filtered = items.filter((r) => r.status !== "cancelled");
 
-    return NextResponse.json({ items: filtered });
+    // Réponse no-store/no-cache
+    const res = NextResponse.json({ items: filtered });
+    res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.headers.set("Pragma", "no-cache");
+    res.headers.set("Expires", "0");
+    return res;
   } catch (e: any) {
     console.error("GET /api/admin/reservations error:", e);
-    return NextResponse.json(
-      { items: [], error: e?.message ?? "Erreur" },
-      { status: 500 }
-    );
+    const res = NextResponse.json({ items: [], error: e?.message ?? "Erreur" }, { status: 500 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   }
 }
