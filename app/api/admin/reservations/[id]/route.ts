@@ -22,7 +22,7 @@ export async function PATCH(
     const ref = db.collection("reservations").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      // idempotent : si déjà supprimée
+      // idempotent : si déjà supprimée/absente
       return NextResponse.json({ ok: true, notFound: true });
     }
 
@@ -45,11 +45,8 @@ export async function PATCH(
 /**
  * DELETE /api/admin/reservations/:id
  *
- * Idempotent :
- *  - Si la réservation n'existe pas, on renvoie ok:true (pas d'erreur)
- * Effets si elle existe :
- *  - Remet le stock (lodgings.reservedUnits -= qty, min 0)
- *  - Supprime définitivement le document de réservation
+ * Rend la réservation "cancelled" (masquée en admin) ET remet le stock.
+ * Idempotent : si le doc n'existe pas, renvoie ok:true.
  */
 export async function DELETE(
   _req: NextRequest,
@@ -58,20 +55,22 @@ export async function DELETE(
   try {
     const id = params.id;
     const db = getAdminDb();
-    const ref = db.collection("reservations").doc(id);
 
-    // Lire d'abord hors transaction pour savoir si le doc existe
-    const pre = await ref.get();
-    if (!pre.exists) {
-      return NextResponse.json({ ok: true, alreadyDeleted: true });
-    }
-
-    const data = pre.data() as any;
-    const lodgingId: string | undefined = data?.lodgingId;
-    const qty: number = Number(data?.qty ?? 0);
+    const resRef = db.collection("reservations").doc(id);
 
     await db.runTransaction(async (tx) => {
-      // 1) Ajuster le stock si possible
+      // Lire la réservation DANS la transaction
+      const resSnap = await tx.get(resRef);
+      if (!resSnap.exists) {
+        // rien à faire : idempotent
+        return;
+      }
+
+      const data = resSnap.data() as any;
+      const lodgingId: string | undefined = data?.lodgingId;
+      const qty: number = Number(data?.qty ?? 0);
+
+      // 1) Remettre le stock si possible
       if (lodgingId && qty > 0) {
         const lodgingRef = db.collection("lodgings").doc(lodgingId);
         const lSnap = await tx.get(lodgingRef);
@@ -82,14 +81,20 @@ export async function DELETE(
           tx.update(lodgingRef, { reservedUnits: newReserved });
         }
       }
-      // 2) Supprimer définitivement la réservation
-      tx.delete(ref);
+
+      // 2) Marquer la réservation comme annulée (on garde l'historique)
+      tx.set(
+        resRef,
+        { status: "cancelled", updatedAt: new Date() },
+        { merge: true }
+      );
     });
 
+    // Réponse OK (idempotent)
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("DELETE /api/admin/reservations/:id error:", e);
-    // pour l'UI, on reste idempotent
+    // on reste idempotent pour l'UI
     return NextResponse.json(
       { ok: true, note: e?.message ?? "Erreur masquée (idempotent)" },
       { status: 200 }
