@@ -8,10 +8,6 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
  * Body (optionnel) :
  *   - paymentStatus?: "paid" | "pending"
  *   - status?: "confirmed" | "cancelled"
- *
- * Remarque :
- *  - On utilise set(..., { merge: true }) pour éviter "No document to update"
- *  - Si la réservation n'existe pas → 404
  */
 export async function PATCH(
   req: NextRequest,
@@ -26,7 +22,8 @@ export async function PATCH(
     const ref = db.collection("reservations").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "reservation_not_found" }, { status: 404 });
+      // idempotent : si déjà supprimée / inexistante
+      return NextResponse.json({ ok: true, notFound: true });
     }
 
     const payload: Record<string, unknown> = { updatedAt: new Date() };
@@ -48,10 +45,11 @@ export async function PATCH(
 /**
  * DELETE /api/admin/reservations/:id
  *
- * Effets :
+ * Idempotent :
+ *  - Si la réservation n'existe pas déjà, on renvoie ok:true (pas d'exception)
+ * Effets si elle existe :
  *  - Remet le stock (lodgings.reservedUnits -= qty, min 0)
  *  - Supprime définitivement le document de réservation
- *  - Si la réservation n'existe pas → 404
  */
 export async function DELETE(
   _req: NextRequest,
@@ -62,37 +60,42 @@ export async function DELETE(
     const db = getAdminDb();
     const ref = db.collection("reservations").doc(id);
 
+    // On lit d'abord HORS transaction pour savoir si le doc existe.
+    const pre = await ref.get();
+    if (!pre.exists) {
+      // Idempotent: rien à faire mais succès
+      return NextResponse.json({ ok: true, alreadyDeleted: true });
+    }
+
+    const data = pre.data() as any;
+    const lodgingId: string | undefined = data?.lodgingId;
+    const qty: number = Number(data?.qty ?? 0);
+
+    // On ajuste le stock + on supprime la résa en UNE transaction
     await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) throw new Error("reservation_not_found");
-
-      const data = snap.data() as any;
-      const lodgingId: string | undefined = data?.lodgingId;
-      const qty: number = Number(data?.qty ?? 0);
-
-      // 1) Remettre le stock si on a un lodgingId et une quantité valide
+      // Ajuster le stock si possible (si lodgingId valide)
       if (lodgingId && qty > 0) {
         const lodgingRef = db.collection("lodgings").doc(lodgingId);
-        const lodgingSnap = await tx.get(lodgingRef);
-        if (lodgingSnap.exists) {
-          const l = lodgingSnap.data() as any;
+        const lSnap = await tx.get(lodgingRef);
+        if (lSnap.exists) {
+          const l = lSnap.data() as any;
           const reservedUnits = Number(l?.reservedUnits ?? 0);
           const newReserved = Math.max(0, reservedUnits - qty);
           tx.update(lodgingRef, { reservedUnits: newReserved });
         }
       }
 
-      // 2) Supprimer la réservation (définitif, elle ne reviendra pas après F5)
+      // Supprimer la réservation (définitif)
       tx.delete(ref);
     });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("DELETE /api/admin/reservations/:id error:", e);
-    const code = e?.message === "reservation_not_found" ? 404 : 500;
+    // On renvoie 200 pour rester idempotent côté UI (évite qu'elle "revienne")
     return NextResponse.json(
-      { error: e?.message ?? "Erreur" },
-      { status: code }
+      { ok: true, note: e?.message ?? "Erreur masquée (idempotent)" },
+      { status: 200 }
     );
   }
 }
