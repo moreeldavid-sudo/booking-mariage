@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICE_PER_TIPI_TOTAL, STAY_LABEL } from "@/lib/constants";
-import { incrementReserved } from "@/lib/db";
 
 function absUrl(path: string) {
   const base =
@@ -13,12 +12,21 @@ function absUrl(path: string) {
   return base ? `${base}${path}` : path;
 }
 
+// Petit helper pour un token d'annulation
+function cryptoRandom(len = 24) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
+  return out;
+}
+
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   try {
     const body = await req.json();
-    const { lodgingId, quantity, firstName, lastName, email } = body;
+    const { lodgingId, quantity, firstName, lastName, email } = body || {};
 
-    // Validations
+    // ==== VALIDATIONS SIMPLES ====
     if (!lodgingId || !quantity || !firstName || !lastName || !email) {
       return NextResponse.json({ error: "Champs manquants." }, { status: 400 });
     }
@@ -31,26 +39,36 @@ export async function POST(req: NextRequest) {
     }
 
     const name = `${firstName} ${lastName}`.trim();
-
     const db = getAdminDb();
     const lodgingRef = db.collection("lodgings").doc(lodgingId);
 
     let afterReserved = 0;
     let lodgingData: any = null;
 
-    // Incrémente via fonction dédiée
-    lodgingData = (await lodgingRef.get()).data();
-    if (!lodgingData) throw new Error("Hébergement introuvable.");
+    // ==== TRANSACTION: vérifie stock + réserve ====
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(lodgingRef);
+      if (!snap.exists) throw new Error("Hébergement introuvable.");
+      const data = snap.data() as any;
+      lodgingData = data;
 
-    await incrementReserved(lodgingId, qty);
-    afterReserved = (lodgingData.reservedUnits ?? 0) + qty;
+      const totalUnits: number = Number(data.totalUnits ?? 0);
+      const reservedUnits: number = Number(data.reservedUnits ?? 0);
+      const remaining = totalUnits - reservedUnits;
+      if (qty > remaining) throw new Error(`Plus que ${remaining} dispo.`);
+
+      afterReserved = reservedUnits + qty;
+      tx.update(lodgingRef, { reservedUnits: afterReserved });
+    });
 
     const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
     const totalCHF = unitPriceCHF * qty;
 
+    // ==== ÉCRITURE DE LA RÉSERVATION ====
     const cancelToken = cryptoRandom();
 
-    const reservationDoc = await db.collection("reservations").add({
+    // createdAt en Date (Firestore stockera un Timestamp)
+    const reservationPayload = {
       lodgingId,
       lodgingName: lodgingData?.title ?? lodgingId,
       qty,
@@ -65,14 +83,26 @@ export async function POST(req: NextRequest) {
       paymentStatus: "pending",
       cancelToken,
       createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const reservationDoc = await db.collection("reservations").add(reservationPayload);
+    const reservationId = reservationDoc.id;
+
+    console.log("[reservations:POST] created", {
+      reservationId,
+      lodgingId,
+      qty,
+      email,
+      afterReserved,
+      tookMs: Date.now() - startedAt,
     });
 
-    const reservationId = reservationDoc.id;
     const cancelUrl = absUrl(
       `/api/reservations/cancel?token=${encodeURIComponent(cancelToken)}`
     );
 
-    // ---- EmailJS ----
+    // ==== EMAILS (best-effort, on n'échoue pas la résa si EmailJS tombe) ====
     const endpoint = "https://api.emailjs.com/api/v1.0/email/send";
     const headers = { "Content-Type": "application/json" };
 
@@ -93,7 +123,6 @@ export async function POST(req: NextRequest) {
       cancel_url: cancelUrl,
     };
 
-    // Client
     const payloadClient = {
       service_id,
       template_id: template_id_client,
@@ -101,13 +130,10 @@ export async function POST(req: NextRequest) {
       template_params: {
         ...baseParams,
         to_email: email,
-        summary_line: `Réservation confirmée : ${qty} ${
-          qty > 1 ? "tipis" : "tipi"
-        } — Total ${totalCHF} CHF`,
+        summary_line: `Réservation confirmée : ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF`,
       },
     };
 
-    // Admin
     const payloadAdmin = admin_email
       ? {
           service_id,
@@ -116,31 +142,29 @@ export async function POST(req: NextRequest) {
           template_params: {
             ...baseParams,
             to_email: admin_email,
-            summary_line: `Nouvelle réservation : ${qty} ${
-              qty > 1 ? "tipis" : "tipi"
-            } — ${lodgingData?.title ?? lodgingId} — Total ${totalCHF} CHF`,
+            summary_line: `Nouvelle réservation : ${qty} ${qty > 1 ? "tipis" : "tipi"} — ${lodgingData?.title ?? lodgingId} — Total ${totalCHF} CHF`,
           },
         }
       : null;
 
-    const promises: Promise<Response>[] = [
+    // Envoi en parallèle, sans bloquer la réponse utilisateur
+    const emailPromises: Promise<Response>[] = [
       fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadClient) }),
     ];
     if (payloadAdmin) {
-      promises.push(
-        fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) })
-      );
+      emailPromises.push(fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payloadAdmin) }));
     }
-
-    const results = await Promise.all(promises);
-    results.forEach(async (r, i) => {
-      if (!r.ok) {
-        console.error(
-          `EmailJS ${i === 0 ? "client" : "admin"} error:`,
-          r.status,
-          await r.text()
-        );
-      }
+    // Fire-and-forget (log si échec)
+    Promise.allSettled(emailPromises).then(results => {
+      results.forEach((r, idx) => {
+        if (r.status === "rejected") {
+          console.error(`[EmailJS] ${idx === 0 ? "client" : "admin"} rejected:`, r.reason);
+        } else if (!r.value.ok) {
+          r.value.text().then(t => {
+            console.error(`[EmailJS] ${idx === 0 ? "client" : "admin"} not ok:`, r.value.status, t);
+          });
+        }
+      });
     });
 
     return NextResponse.json({
@@ -151,19 +175,10 @@ export async function POST(req: NextRequest) {
       cancelUrl,
     });
   } catch (e: any) {
-    console.error("🔥 Erreur /api/reservations:", e);
+    console.error("🔥 Erreur /api/reservations POST:", e);
     return NextResponse.json(
       { error: e?.message ?? "Erreur serveur" },
       { status: 500 }
     );
   }
-}
-
-function cryptoRandom(len = 24) {
-  const alphabet =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let out = "";
-  for (let i = 0; i < len; i++)
-    out += alphabet[(Math.random() * alphabet.length) | 0];
-  return out;
 }
