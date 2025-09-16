@@ -11,14 +11,11 @@ type Reservation = {
   email: string;
   totalCHF: number;
   paymentStatus: string;
-  status?: string;        // <— pour filtrer les annulées
-  createdAt: number;      // ms epoch
+  status?: string;
+  createdAt: number;
 };
 
-type Stock = {
-  tipi140: number;
-  tipi90: number;
-};
+type Stock = { tipi140: number; tipi90: number };
 
 export default function AdminPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -26,9 +23,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   async function fetchReservations() {
-    const res = await fetch("/api/admin/reservations");
+    const res = await fetch(`/api/admin/reservations?ts=${Date.now()}`, {
+      cache: "no-store",
+      headers: { "cache-control": "no-cache" },
+    });
     const data = await res.json();
-    // ne garder que les non-annulées
     const items: Reservation[] = (data.items || []).filter(
       (r: Reservation) => (r.status || "confirmed") !== "cancelled"
     );
@@ -36,7 +35,10 @@ export default function AdminPage() {
   }
 
   async function fetchStock() {
-    const res = await fetch("/api/stock");
+    const res = await fetch(`/api/stock?ts=${Date.now()}`, {
+      cache: "no-store",
+      headers: { "cache-control": "no-cache" },
+    });
     const data = await res.json();
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
@@ -49,12 +51,11 @@ export default function AdminPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentStatus: "paid" }),
-    }).then(r => r.ok);
-
-    if (!ok) return alert("Impossible de marquer payé.");
-    // maj immédiate de l’UI
-    setReservations(prev =>
-      prev.map(r => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
+    }).then((r) => r.ok);
+    if (!ok) return alert("Impossible de marquer payé (réservation introuvable).");
+    // MAJ immédiate
+    setReservations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
     );
   }
 
@@ -62,11 +63,11 @@ export default function AdminPage() {
     if (!confirm("Annuler cette réservation ?")) return;
     const ok = await fetch(`/api/admin/reservations/${id}`, {
       method: "DELETE",
-    }).then(r => r.ok);
+    }).then((r) => r.ok);
+    if (!ok) return alert("Impossible d'annuler (réservation introuvable).");
 
-    if (!ok) return alert("Impossible d’annuler.");
-    // retirer la ligne tout de suite + MAJ compteurs
-    setReservations(prev => prev.filter(r => r.id !== id));
+    // Retirer tout de suite + mettre à jour les compteurs
+    setReservations((prev) => prev.filter((r) => r.id !== id));
     fetchStock();
   }
 
@@ -93,7 +94,7 @@ export default function AdminPage() {
     );
   }, []);
 
-  // ===== Helpers export & affichage =====
+  // Helpers
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -146,25 +147,13 @@ export default function AdminPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-bold">Admin — Réservations</h1>
         <div className="flex gap-2">
-          <button
-            onClick={exportCSV}
-            className="px-3 py-2 rounded bg-black text-white"
-            title="Exporter toutes les réservations en CSV"
-          >
+          <button onClick={exportCSV} className="px-3 py-2 rounded bg-black text-white">
             Exporter CSV
           </button>
-          <button
-            onClick={resetCounters}
-            className="px-3 py-2 rounded bg-gray-700 text-white"
-            title="Remettre reservedUnits à 0 pour tous les logements"
-          >
+          <button onClick={resetCounters} className="px-3 py-2 rounded bg-gray-700 text-white">
             Réinitialiser compteurs
           </button>
-          <button
-            onClick={logout}
-            className="px-3 py-2 rounded bg-gray-500 text-white"
-            title="Se déconnecter de l’espace admin"
-          >
+          <button onClick={logout} className="px-3 py-2 rounded bg-gray-500 text-white">
             Déconnexion
           </button>
         </div>
@@ -207,15 +196,13 @@ export default function AdminPage() {
                 <td className="border px-2 py-1">{r.lodgingName}</td>
                 <td className="border px-2 py-1 text-right">{r.qty}</td>
                 <td className="border px-2 py-1 text-right">{r.totalCHF}</td>
-                <td
-                  className={`border px-2 py-1 ${
+                <td className={`border px-2 py-1 ${
                     r.paymentStatus === "paid"
                       ? "text-green-600"
                       : r.paymentStatus === "pending"
                       ? "text-amber-700"
                       : "text-red-600"
-                  }`}
-                >
+                  }`}>
                   {statusFr(r.paymentStatus)}
                 </td>
                 <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
