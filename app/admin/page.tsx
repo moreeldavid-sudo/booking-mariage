@@ -24,14 +24,10 @@ export default function AdminPage() {
   const [rowLoading, setRowLoading] = useState<string | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ====== LOADERS (avec logs visibles dans F12 > Console) ======
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
     console.log("[admin] fetchReservations:", url);
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: { "cache-control": "no-cache" },
-    });
+    const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       console.error("fetchReservations error", res.status, txt);
@@ -42,9 +38,7 @@ export default function AdminPage() {
     console.log("[admin] reservations payload RAW:", data);
 
     let items: Reservation[] = Array.isArray(data?.items) ? data.items : [];
-    // On cache seulement les status 'cancelled'
     items = items.filter((r) => (r.status || "confirmed") !== "cancelled");
-
     console.log("[admin] reservations used (after filter):", items.length, items);
     setReservations(items);
   }
@@ -52,10 +46,7 @@ export default function AdminPage() {
   async function fetchStock() {
     const url = `/api/stock?ts=${Date.now()}`;
     console.log("[admin] fetchStock:", url);
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: { "cache-control": "no-cache" },
-    });
+    const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       console.error("fetchStock error", res.status, txt);
@@ -70,7 +61,6 @@ export default function AdminPage() {
     });
   }
 
-  // ====== ACTIONS ======
   async function markPaid(id: string) {
     setRowLoading(id);
     try {
@@ -86,11 +76,7 @@ export default function AdminPage() {
         alert(`Erreur marquer payé (${res.status})\n${txt}`);
         return;
       }
-      // MAJ optimiste
-      setReservations((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
-      );
-      // Re-sync de sécurité
+      setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r)));
       await fetchReservations();
     } finally {
       setRowLoading(null);
@@ -101,29 +87,29 @@ export default function AdminPage() {
     if (!confirm("Annuler cette réservation ?")) return;
 
     setRowLoading(id);
-
-    // 1) Suppression optimiste immédiate
     const before = reservations;
     setReservations(before.filter((r) => r.id !== id));
 
     try {
-      // 2) Appel API (idempotente côté serveur)
       const res = await fetch(`/api/admin/reservations/${id}`, {
         method: "DELETE",
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
       });
-      const txt = await res.text().catch(() => "");
-      console.log("[admin] DELETE result:", res.status, txt || "<no body>");
+      const text = await res.text().catch(() => "");
+      console.log("[admin] DELETE result (raw):", res.status, text || "<no body>");
+      // essaie de décoder JSON pour log précis
+      try {
+        const json = JSON.parse(text);
+        console.log("[admin] DELETE json:", json);
+      } catch {}
 
-      // 3) Re-sync depuis la base (évite toute “résa fantôme”)
       await Promise.all([fetchReservations(), fetchStock()]);
 
       if (!res.ok) {
-        alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
+        alert(`Erreur annulation (${res.status})\n${text}\nLa page a été resynchronisée.`);
       }
     } catch (e) {
-      // 4) En cas d’erreur réseau : on restaure l’UI et on informe
       setReservations(before);
       alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
@@ -149,24 +135,20 @@ export default function AdminPage() {
     window.location.href = "/admin/login";
   }
 
-  // ====== INIT + POLLING (10s) ======
   useEffect(() => {
     (async () => {
       await Promise.all([fetchReservations(), fetchStock()]);
       setLoading(false);
     })();
-
     pollRef.current = setInterval(() => {
       fetchReservations();
       fetchStock();
     }, 10000);
-
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
 
-  // ====== HELPERS ======
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -214,14 +196,14 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  // ====== RENDER ======
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold">Admin — Réservations</h1>
           <div className="text-sm text-gray-600 mt-1">
-            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée{reservations.length > 1 ? "s" : ""}
+            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée
+            {reservations.length > 1 ? "s" : ""}
           </div>
         </div>
         <div className="flex gap-2">
