@@ -3,47 +3,58 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 
+function toMs(createdAt: any): number {
+  // Accepte Timestamp Firestore, Date, number, string
+  try {
+    if (!createdAt) return Date.now();
+    if (typeof createdAt?.toDate === "function") {
+      return createdAt.toDate().getTime();
+    }
+    if (createdAt instanceof Date) return createdAt.getTime();
+    if (typeof createdAt === "number") return createdAt;
+    const d = new Date(createdAt);
+    if (!isNaN(d.getTime())) return d.getTime();
+  } catch {}
+  return Date.now();
+}
+
 export async function GET() {
   try {
     const db = getAdminDb();
 
-    // Récupère TOUTES les réservations, triées par date desc
-    const snap = await db
-      .collection("reservations")
-      .orderBy("createdAt", "desc")
-      .get();
+    // ⚠️ on évite orderBy pour lever tout risque d’index/field manquant
+    const snap = await db.collection("reservations").get();
 
     const items = snap.docs.map((d) => {
       const data = d.data() as any;
-      // Normaliser createdAt (Firestore Timestamp -> number ms)
-      let createdAtMs = Date.now();
-      const ca = data.createdAt;
-      if (ca && typeof ca.toDate === "function") {
-        createdAtMs = ca.toDate().getTime();
-      } else if (typeof ca === "number") {
-        createdAtMs = ca;
-      }
-
       return {
         id: d.id,
         lodgingId: data.lodgingId ?? null,
         lodgingName: data.lodgingName ?? null,
-        qty: data.qty ?? 0,
-        name: data.name ?? `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim(),
+        qty: Number(data.qty ?? 0),
+        name:
+          data.name ??
+          `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim(),
         email: data.email ?? "",
-        totalCHF: data.totalCHF ?? 0,
+        totalCHF: Number(data.totalCHF ?? 0),
         paymentStatus: data.paymentStatus ?? "pending",
         status: data.status ?? "confirmed",
-        createdAt: createdAtMs,
+        createdAt: toMs(data.createdAt),
       };
     });
 
-    // Masquer les annulées dans l’admin (on garde l’historique en base)
+    // On trie côté serveur (desc)
+    items.sort((a, b) => b.createdAt - a.createdAt);
+
+    // On masque les annulées dans l’UI
     const filtered = items.filter((r) => r.status !== "cancelled");
 
     return NextResponse.json({ items: filtered });
   } catch (e: any) {
     console.error("GET /api/admin/reservations error:", e);
-    return NextResponse.json({ items: [], error: e?.message ?? "Erreur" }, { status: 500 });
+    return NextResponse.json(
+      { items: [], error: e?.message ?? "Erreur" },
+      { status: 500 }
+    );
   }
 }
