@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Reservation = {
   id: string;
@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [stock, setStock] = useState<Stock | null>(null);
   const [loading, setLoading] = useState(true);
   const [rowLoading, setRowLoading] = useState<string | null>(null); // id en action
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
@@ -31,7 +32,7 @@ export default function AdminPage() {
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      alert(`Erreur chargement réservations (${res.status})\n${txt}`);
+      console.error("fetchReservations error", res.status, txt);
       setReservations([]);
       return;
     }
@@ -50,7 +51,7 @@ export default function AdminPage() {
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      alert(`Erreur chargement stock (${res.status})\n${txt}`);
+      console.error("fetchStock error", res.status, txt);
       setStock({ tipi140: 0, tipi90: 0 });
       return;
     }
@@ -68,6 +69,7 @@ export default function AdminPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentStatus: "paid" }),
+        cache: "no-store",
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -88,28 +90,27 @@ export default function AdminPage() {
 
     setRowLoading(id);
 
-    // 1) Suppression optimiste immédiate
-    const prev = reservations;
-    setReservations(prev.filter((r) => r.id !== id));
+    // Suppression optimiste immédiate
+    const before = reservations;
+    setReservations(before.filter((r) => r.id !== id));
 
     try {
-      // 2) Appel API (idempotente côté serveur)
       const res = await fetch(`/api/admin/reservations/${id}`, {
         method: "DELETE",
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
       });
 
-      // 3) Re-sync depuis la base (évite qu’elle “revienne” après F5)
+      // On re-synchronise liste + stock quoi qu’il arrive
       await Promise.all([fetchReservations(), fetchStock()]);
 
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        alert(`Erreur annulation (${res.status})\n${txt}\nLa liste a été resynchronisée.`);
+        alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
       }
     } catch (e) {
-      // 4) En cas d’erreur réseau : on restaure l’ancienne UI et on alerte
-      setReservations(prev);
+      // En cas d’erreur réseau → on restaure l’UI et on informe
+      setReservations(before);
       alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
       setRowLoading(null);
@@ -118,7 +119,7 @@ export default function AdminPage() {
 
   async function resetCounters() {
     if (!confirm("Remettre tous les compteurs à 0 ?")) return;
-    const res = await fetch("/api/admin/stock/reset", { method: "POST" });
+    const res = await fetch("/api/admin/stock/reset", { method: "POST", cache: "no-store" });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       alert(`Erreur réinitialisation (${res.status})\n${txt}`);
@@ -133,10 +134,22 @@ export default function AdminPage() {
     window.location.href = "/admin/login";
   }
 
+  // Chargement initial + polling 10s
   useEffect(() => {
-    Promise.all([fetchReservations(), fetchStock()]).then(() =>
-      setLoading(false)
-    );
+    (async () => {
+      await Promise.all([fetchReservations(), fetchStock()]);
+      setLoading(false);
+    })();
+
+    // Polling toutes les 10 secondes (tu peux mettre 15 ou 20 si tu veux)
+    pollRef.current = setInterval(() => {
+      fetchReservations();
+      fetchStock();
+    }, 10000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   // Helpers
@@ -259,7 +272,11 @@ export default function AdminPage() {
                         : "text-red-600"
                     }`}
                   >
-                    {statusFr(r.paymentStatus)}
+                    {r.paymentStatus === "paid"
+                      ? "Payé"
+                      : r.paymentStatus === "pending"
+                      ? "En attente de paiement"
+                      : r.paymentStatus}
                   </td>
                   <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
                   <td className="border px-2 py-1 space-x-2">
