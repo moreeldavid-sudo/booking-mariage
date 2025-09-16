@@ -22,7 +22,7 @@ export async function PATCH(
     const ref = db.collection("reservations").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      // idempotent : si déjà supprimée / inexistante
+      // idempotent : si déjà supprimée
       return NextResponse.json({ ok: true, notFound: true });
     }
 
@@ -46,7 +46,7 @@ export async function PATCH(
  * DELETE /api/admin/reservations/:id
  *
  * Idempotent :
- *  - Si la réservation n'existe pas déjà, on renvoie ok:true (pas d'exception)
+ *  - Si la réservation n'existe pas, on renvoie ok:true (pas d'erreur)
  * Effets si elle existe :
  *  - Remet le stock (lodgings.reservedUnits -= qty, min 0)
  *  - Supprime définitivement le document de réservation
@@ -60,10 +60,9 @@ export async function DELETE(
     const db = getAdminDb();
     const ref = db.collection("reservations").doc(id);
 
-    // On lit d'abord HORS transaction pour savoir si le doc existe.
+    // Lire d'abord hors transaction pour savoir si le doc existe
     const pre = await ref.get();
     if (!pre.exists) {
-      // Idempotent: rien à faire mais succès
       return NextResponse.json({ ok: true, alreadyDeleted: true });
     }
 
@@ -71,9 +70,8 @@ export async function DELETE(
     const lodgingId: string | undefined = data?.lodgingId;
     const qty: number = Number(data?.qty ?? 0);
 
-    // On ajuste le stock + on supprime la résa en UNE transaction
     await db.runTransaction(async (tx) => {
-      // Ajuster le stock si possible (si lodgingId valide)
+      // 1) Ajuster le stock si possible
       if (lodgingId && qty > 0) {
         const lodgingRef = db.collection("lodgings").doc(lodgingId);
         const lSnap = await tx.get(lodgingRef);
@@ -84,17 +82,16 @@ export async function DELETE(
           tx.update(lodgingRef, { reservedUnits: newReserved });
         }
       }
-
-      // Supprimer la réservation (définitif)
+      // 2) Supprimer définitivement la réservation
       tx.delete(ref);
     });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("DELETE /api/admin/reservations/:id error:", e);
-    // On renvoie 200 pour rester idempotent côté UI (évite qu'elle "revienne")
+    // pour l'UI, on reste idempotent
     return NextResponse.json(
-      { ok: true, note: e?.message ?? "Erreur masquée (idempotent)" },
+      { ok: true, note: e?.message ?? "Erreur masquée (idempotent)" },
       { status: 200 }
     );
   }
