@@ -21,11 +21,13 @@ export default function AdminPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [stock, setStock] = useState<Stock | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rowLoading, setRowLoading] = useState<string | null>(null); // id en action
+  const [rowLoading, setRowLoading] = useState<string | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ====== LOADERS (avec logs visibles dans F12 > Console) ======
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
+    console.log("[admin] fetchReservations:", url);
     const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
@@ -37,14 +39,19 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
-    const items: Reservation[] = (data.items || []).filter(
-      (r: Reservation) => (r.status || "confirmed") !== "cancelled"
-    );
+    console.log("[admin] reservations payload RAW:", data);
+
+    let items: Reservation[] = Array.isArray(data?.items) ? data.items : [];
+    // On cache seulement les status 'cancelled'
+    items = items.filter((r) => (r.status || "confirmed") !== "cancelled");
+
+    console.log("[admin] reservations used (after filter):", items.length, items);
     setReservations(items);
   }
 
   async function fetchStock() {
     const url = `/api/stock?ts=${Date.now()}`;
+    console.log("[admin] fetchStock:", url);
     const res = await fetch(url, {
       cache: "no-store",
       headers: { "cache-control": "no-cache" },
@@ -56,12 +63,14 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
+    console.log("[admin] stock payload RAW:", data);
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
       tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
     });
   }
 
+  // ====== ACTIONS ======
   async function markPaid(id: string) {
     setRowLoading(id);
     try {
@@ -71,15 +80,18 @@ export default function AdminPage() {
         body: JSON.stringify({ paymentStatus: "paid" }),
         cache: "no-store",
       });
+      const txt = await res.text().catch(() => "");
+      console.log("[admin] PATCH paid result:", res.status, txt || "<no body>");
       if (!res.ok) {
-        const txt = await res.text().catch(() => "");
         alert(`Erreur marquer payé (${res.status})\n${txt}`);
         return;
       }
-      // MAJ immédiate
+      // MAJ optimiste
       setReservations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r))
       );
+      // Re-sync de sécurité
+      await fetchReservations();
     } finally {
       setRowLoading(null);
     }
@@ -90,26 +102,28 @@ export default function AdminPage() {
 
     setRowLoading(id);
 
-    // Suppression optimiste immédiate
+    // 1) Suppression optimiste immédiate
     const before = reservations;
     setReservations(before.filter((r) => r.id !== id));
 
     try {
+      // 2) Appel API (idempotente côté serveur)
       const res = await fetch(`/api/admin/reservations/${id}`, {
         method: "DELETE",
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
       });
+      const txt = await res.text().catch(() => "");
+      console.log("[admin] DELETE result:", res.status, txt || "<no body>");
 
-      // On re-synchronise liste + stock quoi qu’il arrive
+      // 3) Re-sync depuis la base (évite toute “résa fantôme”)
       await Promise.all([fetchReservations(), fetchStock()]);
 
       if (!res.ok) {
-        const txt = await res.text().catch(() => "");
         alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
       }
     } catch (e) {
-      // En cas d’erreur réseau → on restaure l’UI et on informe
+      // 4) En cas d’erreur réseau : on restaure l’UI et on informe
       setReservations(before);
       alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
@@ -120,8 +134,9 @@ export default function AdminPage() {
   async function resetCounters() {
     if (!confirm("Remettre tous les compteurs à 0 ?")) return;
     const res = await fetch("/api/admin/stock/reset", { method: "POST", cache: "no-store" });
+    const txt = await res.text().catch(() => "");
+    console.log("[admin] POST reset stock:", res.status, txt || "<no body>");
     if (!res.ok) {
-      const txt = await res.text().catch(() => "");
       alert(`Erreur réinitialisation (${res.status})\n${txt}`);
       return;
     }
@@ -134,14 +149,13 @@ export default function AdminPage() {
     window.location.href = "/admin/login";
   }
 
-  // Chargement initial + polling 10s
+  // ====== INIT + POLLING (10s) ======
   useEffect(() => {
     (async () => {
       await Promise.all([fetchReservations(), fetchStock()]);
       setLoading(false);
     })();
 
-    // Polling toutes les 10 secondes (tu peux mettre 15 ou 20 si tu veux)
     pollRef.current = setInterval(() => {
       fetchReservations();
       fetchStock();
@@ -152,7 +166,7 @@ export default function AdminPage() {
     };
   }, []);
 
-  // Helpers
+  // ====== HELPERS ======
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -200,10 +214,16 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
+  // ====== RENDER ======
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-bold">Admin — Réservations</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Admin — Réservations</h1>
+          <div className="text-sm text-gray-600 mt-1">
+            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée{reservations.length > 1 ? "s" : ""}
+          </div>
+        </div>
         <div className="flex gap-2">
           <button onClick={exportCSV} className="px-3 py-2 rounded bg-black text-white">
             Exporter CSV
