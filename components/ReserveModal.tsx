@@ -1,7 +1,19 @@
 "use client";
 import { useState } from "react";
 
-export default function ReserveModal({ lodging, onClose }: { lodging: any; onClose: () => void }) {
+type Props = {
+  lodging: any;
+  onClose: () => void;
+};
+
+// Taux EUR indicatif (modifiable via .env => NEXT_PUBLIC_EUR_RATE)
+const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
+
+// Formatters
+const fmtCHF = new Intl.NumberFormat("fr-CH");
+const fmtEUR = new Intl.NumberFormat("fr-FR");
+
+export default function ReserveModal({ lodging, onClose }: Props) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -10,9 +22,13 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
   const [confirmation, setConfirmation] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const total = quantity * 200; // prix fixe
+  // Prix unitaire côté client (même valeur que côté serveur)
+  const UNIT_CHF = 200;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const totalChf = (Number(quantity) || 0) * UNIT_CHF;
+  const totalEur = Math.round(totalChf * EUR_RATE);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -39,19 +55,39 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
     } finally {
       setLoading(false);
     }
-  };
+  }
 
+  // ===== Écran de confirmation =====
   if (confirmation) {
+    const confChf = Number(confirmation.totalChf ?? totalChf);
+    const confEur =
+      typeof confirmation.totalEur === "number"
+        ? Number(confirmation.totalEur)
+        : Math.round(confChf * EUR_RATE);
+
+    const ref = confirmation.reservationCode || confirmation.humanCode || confirmation.reservationId;
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl p-6 w-full max-w-md">
           <h2 className="text-xl font-semibold mb-4">Merci {firstName} !</h2>
-          <p>
-            Votre réservation est confirmée. <br />
-            Réf: <b>{confirmation.reservationId}</b>
+
+          <p className="mb-2">
+            Votre réservation est confirmée.
+            <br />
+            Réf : <b>{ref}</b>
           </p>
-          <p className="mt-2">Montant total : <b>{confirmation.totalChf} CHF</b></p>
+
+          <p className="mt-2">
+            Montant total :{" "}
+            <b>
+              {fmtCHF.format(confChf)} CHF / {fmtEUR.format(confEur)} €
+            </b>{" "}
+            <span className="text-gray-500 font-normal">(montant € indicatif)</span>
+          </p>
+
           <p className="mt-2">Un email de confirmation vous a été envoyé.</p>
+
           <button onClick={onClose} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">
             Fermer
           </button>
@@ -60,10 +96,14 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
     );
   }
 
+  // ===== Formulaire =====
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4">Réserver {lodging.title}</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          Réserver {lodging.title || lodging.name}
+        </h2>
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-sm font-medium">Prénom</label>
@@ -75,6 +115,7 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
               className="w-full border rounded p-2"
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium">Nom</label>
             <input
@@ -85,6 +126,7 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
               className="w-full border rounded p-2"
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium">Email</label>
             <input
@@ -95,6 +137,7 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
               className="w-full border rounded p-2"
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium">Nombre de tipis</label>
             <input
@@ -106,8 +149,18 @@ export default function ReserveModal({ lodging, onClose }: { lodging: any; onClo
               className="w-full border rounded p-2"
             />
           </div>
-          <p className="text-sm">Total : <b>{total} CHF</b></p>
+
+          {/* Total CHF + EUR sur une seule ligne */}
+          <div className="text-sm md:text-base font-semibold">
+            Total : {fmtCHF.format(totalChf)}&nbsp;CHF&nbsp;/&nbsp;
+            {fmtEUR.format(totalEur)}&nbsp;€
+            <span className="ml-2 text-gray-500 font-normal">
+              (montant € indicatif)
+            </span>
+          </div>
+
           {error && <p className="text-red-600">{error}</p>}
+
           <div className="flex justify-end space-x-2">
             <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-300 rounded">
               Annuler
