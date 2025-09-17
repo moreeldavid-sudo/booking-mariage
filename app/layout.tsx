@@ -10,7 +10,7 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Réservation hébergements — Mariage",
+  title: "Réservation d’hébergements en tentes — Mariage Vanessa & David",
   description: "Réservation des tentes pour le mariage – Domaine de Brés",
 };
 
