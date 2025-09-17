@@ -18,8 +18,12 @@ type Props = {
   ctaLabel?: string;
 };
 
+// === Prix & libellés ===
 const PRICE_PER_TIPI_TOTAL = 200; // CHF pour tout le séjour
 const STAY_LABEL = "pour les 3 nuits (26–28 juin 2026)";
+
+// Taux EUR indicatif (peut être ajusté côté .env si tu veux)
+const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
 
 export default function LodgingCard({
   lodging,
@@ -31,9 +35,12 @@ export default function LodgingCard({
   const remaining = Math.max(total - reserved, 0);
   const isFull = remaining <= 0;
 
+  const unitChf = PRICE_PER_TIPI_TOTAL;
+  const unitEur = Math.round(unitChf * EUR_RATE);
+
   return (
-    /* Ajout de la classe lodging-card pour augmenter la taille UNIQUEMENT ici */
-    <div className="lodging-card font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
+    // 👉 On force la police des cartes en Inter (comme « avant »)
+    <div className="font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
       {/* Image */}
       <div className="relative h-56 w-full md:h-64">
         <Image
@@ -48,7 +55,7 @@ export default function LodgingCard({
       {/* Contenu */}
       <div className="p-6 flex-1 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
-          {/* Titre */}
+          {/* Titre — style Inter, lisible comme avant */}
           <h3 className="text-xl md:text-2xl font-semibold leading-snug tracking-tight text-slate-900">
             {lodging.name}
           </h3>
@@ -75,18 +82,18 @@ export default function LodgingCard({
           </p>
         )}
 
-        {/* Prix */}
+        {/* Prix (badge arrondi, CHF + EUR) */}
         <div className="mt-1">
           <span className="inline-flex items-center gap-3 text-sm md:text-base">
             <span className="px-4 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold">
-              {PRICE_PER_TIPI_TOTAL} CHF
+              {unitChf} CHF / {unitEur} €
             </span>
             <span className="text-gray-600">par tipi {STAY_LABEL}</span>
           </span>
         </div>
 
         <div className="mt-1 text-xs md:text-sm text-gray-500">
-          Prix identique pour lit 140 cm et 2×90 cm.
+          Prix identique pour lit 140 cm et 2×90 cm. Montant en € indicatif (taux fixe).
         </div>
 
         {/* Action */}
