@@ -22,10 +22,10 @@ type Props = {
 const PRICE_PER_TIPI_TOTAL = 200; // CHF pour tout le séjour
 const STAY_LABEL = "pour les 3 nuits (26–28 juin 2026)";
 
-// Taux EUR indicatif (peut être ajusté côté .env si tu veux)
+// Taux EUR (modifiable via .env => NEXT_PUBLIC_EUR_RATE)
 const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
 
-// Formatters pour un affichage propre
+// Formatters
 const fmtCHF = new Intl.NumberFormat("fr-CH");
 const fmtEUR = new Intl.NumberFormat("fr-FR");
 
@@ -43,7 +43,7 @@ export default function LodgingCard({
   const unitEur = Math.round(unitChf * EUR_RATE);
 
   return (
-    // 👉 On force la police des cartes en Inter (comme « avant »)
+    // 👉 Police des cartes en Inter
     <div className="font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
       {/* Image */}
       <div className="relative h-56 w-full md:h-64">
@@ -59,7 +59,7 @@ export default function LodgingCard({
       {/* Contenu */}
       <div className="p-6 flex-1 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
-          {/* Titre — style Inter, lisible comme avant */}
+          {/* Titre */}
           <h3 className="text-xl md:text-2xl font-semibold leading-snug tracking-tight text-slate-900">
             {lodging.name}
           </h3>
@@ -86,11 +86,10 @@ export default function LodgingCard({
           </p>
         )}
 
-        {/* Prix (badge arrondi, CHF + EUR) */}
+        {/* Prix (badge arrondi, CHF + EUR, une seule ligne) */}
         <div className="mt-1">
           <span className="inline-flex items-center gap-3 text-sm md:text-base">
             <span className="px-4 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold inline-flex items-center gap-1 whitespace-nowrap leading-none">
-              {/* espaces insécables pour bloquer les sauts indésirables */}
               <span>{fmtCHF.format(unitChf)}{"\u00A0"}CHF</span>
               <span>/</span>
               <span>{fmtEUR.format(unitEur)}{"\u00A0"}€</span>
@@ -100,7 +99,7 @@ export default function LodgingCard({
         </div>
 
         <div className="mt-1 text-xs md:text-sm text-gray-500">
-          Prix identique pour lit 140 cm et 2×90 cm. Montant en € indicatif (taux fixe).
+          Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.
         </div>
 
         {/* Action */}
