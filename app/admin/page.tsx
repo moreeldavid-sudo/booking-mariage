@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 
 type Reservation = {
-  id: string;                 // interne
-  humanCode?: string | null;  // ← NEW
+  id: string;                 // id interne Firestore (caché à l'utilisateur)
+  humanCode?: string | null;  // Référence lisible (JJMMAA-##)
   lodgingName: string | null;
   lodgingId: string;
   qty: number;
   name: string;
   email: string;
   totalCHF: number;
-  paymentStatus: string;
+  paymentStatus: "paid" | "pending" | string;
   status?: string;
   createdAt: number;
 };
@@ -25,6 +25,7 @@ export default function AdminPage() {
   const [rowLoading, setRowLoading] = useState<string | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ===== LOADERS =====
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
     const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
@@ -36,6 +37,7 @@ export default function AdminPage() {
     }
     const data = await res.json();
     let items: Reservation[] = Array.isArray(data?.items) ? data.items : [];
+    // cacher les annulées
     items = items.filter((r) => (r.status || "confirmed") !== "cancelled");
     setReservations(items);
   }
@@ -56,6 +58,7 @@ export default function AdminPage() {
     });
   }
 
+  // ===== ACTIONS =====
   async function markPaid(id: string) {
     setRowLoading(id);
     try {
@@ -102,7 +105,7 @@ export default function AdminPage() {
     if (!confirm("Annuler cette réservation ?")) return;
     setRowLoading(id);
     const before = reservations;
-    setReservations(before.filter((r) => r.id !== id));
+    setReservations(before.filter((r) => r.id !== id)); // optimiste
     try {
       const res = await fetch(`/api/admin/reservations/${id}`, {
         method: "DELETE",
@@ -115,7 +118,7 @@ export default function AdminPage() {
         alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
       }
     } catch (e) {
-      setReservations(before);
+      setReservations(before); // rollback si réseau HS
       alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
       setRowLoading(null);
@@ -139,6 +142,7 @@ export default function AdminPage() {
     window.location.href = "/admin/login";
   }
 
+  // ===== INIT + POLLING =====
   useEffect(() => {
     (async () => {
       await Promise.all([fetchReservations(), fetchStock()]);
@@ -153,6 +157,7 @@ export default function AdminPage() {
     };
   }, []);
 
+  // ===== HELPERS =====
   function csvEscape(val: unknown) {
     const s = String(val ?? "");
     return `"${s.replace(/"/g, '""')}"`;
@@ -173,7 +178,7 @@ export default function AdminPage() {
   function exportCSV() {
     const headers = ["Réf", "Nom", "Email", "Logement", "Qte", "Total CHF", "Paiement", "Date"];
     const rows = reservations.map((r) => [
-      r.humanCode ?? "", // réf lisible
+      r.humanCode ?? "—",
       r.name,
       r.email,
       r.lodgingName ?? "",
@@ -200,6 +205,7 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
+  // ===== RENDER =====
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
