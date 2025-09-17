@@ -6,69 +6,55 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 
 /**
- * GET  /api/admin/reservations/purge-cancelled?olderThanDays=7
- *  -> DRY-RUN : ne supprime rien, renvoie juste le nombre et un échantillon d’IDs
+ * GET  /api/admin/reservations/purge-cancelled?olderThanDays=7&limit=0
+ *   → DRY-RUN : ne supprime rien, renvoie comptage + échantillon
  *
  * POST /api/admin/reservations/purge-cancelled
- *  Body JSON (facultatif):
- *    { "olderThanDays": 0, "limit": 0 }
- *  -> PURGE réelle : supprime les réservations annulées (status=="cancelled")
+ *   Body JSON (facultatif): { "olderThanDays": 0, "limit": 0 }
+ *   → PURGE réelle
  *
- * NB: On ne touche PAS aux stocks (ils sont déjà ajustés à l’annulation).
+ * NB : aucune combinaison where+orderBy → pas d’index composite requis.
  */
 
-type QueryOpts = {
-  olderThanDays?: number;
-  limit?: number;
-};
+type QueryOpts = { olderThanDays?: number; limit?: number };
 
-async function collectCancelledIds(
-  opts: QueryOpts = {}
-): Promise<string[]> {
+function toDateMaybe(v: any): Date | null {
+  try {
+    if (!v) return null;
+    if (typeof v?.toDate === "function") return v.toDate();
+    if (v instanceof Date) return v;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+
+async function collectCancelledIds(opts: QueryOpts = {}): Promise<string[]> {
   const { olderThanDays = 0, limit = 0 } = opts;
   const db = getAdminDb();
 
-  let q: FirebaseFirestore.Query = db
-    .collection("reservations")
-    .where("status", "==", "cancelled");
+  // 1) Récupère TOUTES les réservations annulées (sans orderBy ni second where)
+  const snap = await db.collection("reservations").where("status", "==", "cancelled").get();
 
-  let cutoffDate: Date | null = null;
+  // 2) Filtre en mémoire (pas d’index requis)
+  let ids = snap.docs.map((d) => d.id);
+
   if (olderThanDays > 0) {
-    cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
-    // Firestore n’a pas d’OR : on filtre sur createdAt côté query, et on raffine côté code.
-    q = q.where("createdAt", "<", cutoffDate);
-  }
-
-  const pageSize = 500;
-  let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
-  const found: string[] = [];
-
-  while (true) {
-    let query = q.orderBy("createdAt", "asc").limit(pageSize);
-    if (lastDoc) query = query.startAfter(lastDoc);
-    const snap = await query.get();
-    if (snap.empty) break;
-
-    for (const d of snap.docs) {
-      if (cutoffDate) {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    ids = snap.docs
+      .filter((d) => {
         const data = d.data() as any;
-        const updatedAt =
-          data?.updatedAt?.toDate?.() ??
-          (data?.updatedAt instanceof Date ? data.updatedAt : null);
-        const createdAt =
-          data?.createdAt?.toDate?.() ??
-          (data?.createdAt instanceof Date ? data.createdAt : null);
-        const pivot = updatedAt || createdAt;
-        if (!pivot || pivot >= cutoffDate) continue;
-      }
-      found.push(d.id);
-      if (limit > 0 && found.length >= limit) return found;
-    }
-
-    lastDoc = snap.docs[snap.docs.length - 1];
+        const updatedAt = toDateMaybe(data?.updatedAt);
+        const createdAt = toDateMaybe(data?.createdAt);
+        const pivot = updatedAt || createdAt; // on prend updatedAt si dispo, sinon createdAt
+        return pivot ? pivot < cutoff : false;
+      })
+      .map((d) => d.id);
   }
 
-  return found;
+  if (limit > 0) ids = ids.slice(0, limit);
+  return ids;
 }
 
 export async function GET(req: NextRequest) {
@@ -104,7 +90,7 @@ export async function POST(req: NextRequest) {
     const db = getAdminDb();
     const ids = await collectCancelledIds({ olderThanDays, limit });
 
-    // Suppression par lots (400)
+    // Suppression par lots (jusqu’à 400 par batch)
     let deleted = 0;
     for (let i = 0; i < ids.length; i += 400) {
       const slice = ids.slice(i, i + 400);
