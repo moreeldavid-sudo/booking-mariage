@@ -16,11 +16,11 @@ function cryptoRandom(len = 24) {
   return out;
 }
 
-/**
- * Génère une référence lisible du type JJMMAA-##,
- * avec un compteur qui repart à 01 chaque nouvelle journée.
- * Stockage: collection "counters" / doc "day-<JJMMAA>" => { value: number }
- */
+// === EUR indicatif (modifiable via .env NEXT_PUBLIC_EUR_RATE / EUR_RATE) ===
+const EUR_RATE =
+  Number(process.env.EUR_RATE ?? process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
+
+// ---- Générateur de code lisible JJMMAA-## (compteur journalier) ----
 async function generateDailyHumanCode(db: FirebaseFirestore.Firestore) {
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, "0");
@@ -34,7 +34,7 @@ async function generateDailyHumanCode(db: FirebaseFirestore.Firestore) {
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(counterRef);
     const current = Number(snap.exists ? (snap.data() as any)?.value ?? 0 : 0);
-    const next = current + 1; // repart à 1 chaque jour (on ne boucle pas ici)
+    const next = current + 1;
     tx.set(counterRef, { value: next, updatedAt: new Date() }, { merge: true });
     counterVal = next;
   });
@@ -87,9 +87,11 @@ export async function POST(req: NextRequest) {
     // Référence lisible JOURNALIÈRE
     const humanCode = await generateDailyHumanCode(db);
 
-    // Création réservation
+    // Totaux CHF / EUR (EUR indicatif, arrondi entier)
     const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
     const totalCHF = unitPriceCHF * qty;
+    const totalEUR = Math.round(totalCHF * EUR_RATE);
+
     const cancelToken = cryptoRandom();
 
     const resDoc = {
@@ -102,10 +104,11 @@ export async function POST(req: NextRequest) {
       email,
       unitPriceCHF,
       totalCHF,
+      totalEUR,           // ← ajouté
       stayLabel: STAY_LABEL,
       status: "confirmed",
       paymentStatus: "pending",
-      humanCode, // ← JJMMAA-##
+      humanCode,          // ← JJMMAA-##
       cancelToken,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -128,6 +131,9 @@ export async function POST(req: NextRequest) {
     const template_id_admin = process.env.EMAILJS_TEMPLATE_ID_ADMIN!;
     const admin_email = process.env.RESERVATION_ADMIN_EMAIL || "";
 
+    // Résumé propre incluant les deux devises
+    const summary = `Réf ${humanCode} — ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF (~${totalEUR} €)`;
+
     const baseParams = {
       customer_name: name,
       customer_email: email,
@@ -135,10 +141,11 @@ export async function POST(req: NextRequest) {
       lodging_name: lodgingData?.title ?? lodgingId,
       quantity: String(qty),
       total_chf: String(totalCHF),
-      reservation_code: humanCode, // ← utiliser dans EmailJS: {{reservation_code}}
-      reservation_id: reservationId, // interne, utile en debug
+      total_eur: String(totalEUR),   // ← ajouté
+      reservation_code: humanCode,   // ← utilise {{reservation_code}} dans EmailJS
+      reservation_id: reservationId, // interne
       cancel_url: cancelUrl,
-      summary_line: `Réf ${humanCode} — ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF`,
+      summary_line: summary,         // ← sujet prêt à l’emploi
     };
 
     // Client
@@ -183,9 +190,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      reservationCode: humanCode, // renvoyé au front
-      reservationId,             // interne
+      reservationCode: humanCode,  // lisible
+      reservationId,               // interne
       totalChf: totalCHF,
+      totalEur: totalEUR,          // ← pour affichage front confirmation
       reservedUnits: afterReserved,
       cancelUrl,
     });
