@@ -6,7 +6,7 @@ type Props = {
   onClose: () => void;
 };
 
-// Taux EUR indicatif (modifiable via .env => NEXT_PUBLIC_EUR_RATE)
+// Taux EUR (modifiable via .env => NEXT_PUBLIC_EUR_RATE)
 const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
 
 // Formatters
@@ -82,8 +82,7 @@ export default function ReserveModal({ lodging, onClose }: Props) {
             Montant total :{" "}
             <b>
               {fmtCHF.format(confChf)} CHF / {fmtEUR.format(confEur)} €
-            </b>{" "}
-            <span className="text-gray-500 font-normal">(montant € indicatif)</span>
+            </b>
           </p>
 
           <p className="mt-2">Un email de confirmation vous a été envoyé.</p>
@@ -154,9 +153,6 @@ export default function ReserveModal({ lodging, onClose }: Props) {
           <div className="text-sm md:text-base font-semibold">
             Total : {fmtCHF.format(totalChf)}&nbsp;CHF&nbsp;/&nbsp;
             {fmtEUR.format(totalEur)}&nbsp;€
-            <span className="ml-2 text-gray-500 font-normal">
-              (montant € indicatif)
-            </span>
           </div>
 
           {error && <p className="text-red-600">{error}</p>}
