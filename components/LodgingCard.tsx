@@ -98,8 +98,10 @@ export default function LodgingCard({
           </span>
         </div>
 
-        <div className="mt-1 text-xs md:text-sm text-gray-500">
-          Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.
+        {/* Infos complémentaires */}
+        <div className="mt-1 text-xs md:text-sm text-gray-500 space-y-1">
+          <p>Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.</p>
+          <p>Tarif fixe : identique pour 1, 2 ou 3 nuits.</p>
         </div>
 
         {/* Action */}
