@@ -101,7 +101,7 @@ export default function LodgingCard({
           Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.
         </div>
         <div className="mt-1 text-xs md:text-sm text-gray-500">
-          Le prix est identique que vous restiez 1, 2 ou les 2 nuits complètes.
+          Le prix est identique que vous restiez 1, ou les 2 nuits complètes.
         </div>
 
         {/* Action */}
