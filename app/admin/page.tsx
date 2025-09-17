@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 type Reservation = {
-  id: string;
+  id: string;                 // interne
+  humanCode?: string | null;  // ← NEW
   lodgingName: string | null;
   lodgingId: string;
   qty: number;
@@ -26,7 +27,6 @@ export default function AdminPage() {
 
   async function fetchReservations() {
     const url = `/api/admin/reservations?ts=${Date.now()}`;
-    console.log("[admin] fetchReservations:", url);
     const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -35,17 +35,13 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
-    console.log("[admin] reservations payload RAW:", data);
-
     let items: Reservation[] = Array.isArray(data?.items) ? data.items : [];
     items = items.filter((r) => (r.status || "confirmed") !== "cancelled");
-    console.log("[admin] reservations used (after filter):", items.length, items);
     setReservations(items);
   }
 
   async function fetchStock() {
     const url = `/api/stock?ts=${Date.now()}`;
-    console.log("[admin] fetchStock:", url);
     const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -54,7 +50,6 @@ export default function AdminPage() {
       return;
     }
     const data = await res.json();
-    console.log("[admin] stock payload RAW:", data);
     setStock({
       tipi140: Number(data?.["tipi140"]?.remaining ?? 0),
       tipi90: Number(data?.["tipi90"]?.remaining ?? 0),
@@ -70,9 +65,8 @@ export default function AdminPage() {
         body: JSON.stringify({ paymentStatus: "paid" }),
         cache: "no-store",
       });
-      const txt = await res.text().catch(() => "");
-      console.log("[admin] PATCH paid result:", res.status, txt || "<no body>");
       if (!res.ok) {
+        const txt = await res.text().catch(() => "");
         alert(`Erreur marquer payé (${res.status})\n${txt}`);
         return;
       }
@@ -83,31 +77,42 @@ export default function AdminPage() {
     }
   }
 
+  async function markPending(id: string) {
+    setRowLoading(id);
+    try {
+      const res = await fetch(`/api/admin/reservations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: "pending" }),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        alert(`Erreur remettre en attente (${res.status})\n${txt}`);
+        return;
+      }
+      setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, paymentStatus: "pending" } : r)));
+      await fetchReservations();
+    } finally {
+      setRowLoading(null);
+    }
+  }
+
   async function cancelReservation(id: string) {
     if (!confirm("Annuler cette réservation ?")) return;
-
     setRowLoading(id);
     const before = reservations;
     setReservations(before.filter((r) => r.id !== id));
-
     try {
       const res = await fetch(`/api/admin/reservations/${id}`, {
         method: "DELETE",
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
       });
-      const text = await res.text().catch(() => "");
-      console.log("[admin] DELETE result (raw):", res.status, text || "<no body>");
-      // essaie de décoder JSON pour log précis
-      try {
-        const json = JSON.parse(text);
-        console.log("[admin] DELETE json:", json);
-      } catch {}
-
       await Promise.all([fetchReservations(), fetchStock()]);
-
       if (!res.ok) {
-        alert(`Erreur annulation (${res.status})\n${text}\nLa page a été resynchronisée.`);
+        const txt = await res.text().catch(() => "");
+        alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
       }
     } catch (e) {
       setReservations(before);
@@ -120,9 +125,8 @@ export default function AdminPage() {
   async function resetCounters() {
     if (!confirm("Remettre tous les compteurs à 0 ?")) return;
     const res = await fetch("/api/admin/stock/reset", { method: "POST", cache: "no-store" });
-    const txt = await res.text().catch(() => "");
-    console.log("[admin] POST reset stock:", res.status, txt || "<no body>");
     if (!res.ok) {
+      const txt = await res.text().catch(() => "");
       alert(`Erreur réinitialisation (${res.status})\n${txt}`);
       return;
     }
@@ -167,9 +171,9 @@ export default function AdminPage() {
     return s;
   }
   function exportCSV() {
-    const headers = ["No", "Nom", "Email", "Logement", "Qte", "Total CHF", "Paiement", "Date"];
-    const rows = reservations.map((r, i) => [
-      String(i + 1),
+    const headers = ["Réf", "Nom", "Email", "Logement", "Qte", "Total CHF", "Paiement", "Date"];
+    const rows = reservations.map((r) => [
+      r.humanCode ?? "", // réf lisible
       r.name,
       r.email,
       r.lodgingName ?? "",
@@ -202,8 +206,7 @@ export default function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold">Admin — Réservations</h1>
           <div className="text-sm text-gray-600 mt-1">
-            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée
-            {reservations.length > 1 ? "s" : ""}
+            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée{reservations.length > 1 ? "s" : ""}
           </div>
         </div>
         <div className="flex gap-2">
@@ -228,12 +231,8 @@ export default function AdminPage() {
 
       {stock && (
         <div className="flex flex-wrap gap-6 text-lg">
-          <div>
-            <strong>Tipis lit 140 :</strong> {stock.tipi140} restants
-          </div>
-          <div>
-            <strong>Tipis lits 90 :</strong> {stock.tipi90} restants
-          </div>
+          <div><strong>Tipis lit 140 :</strong> {stock.tipi140} restants</div>
+          <div><strong>Tipis lits 90 :</strong> {stock.tipi90} restants</div>
         </div>
       )}
 
@@ -245,6 +244,7 @@ export default function AdminPage() {
         <table className="min-w-full border border-gray-300">
           <thead className="bg-gray-100">
             <tr>
+              <th className="border px-2 py-1 text-left">Réf</th>
               <th className="border px-2 py-1 text-left">Nom</th>
               <th className="border px-2 py-1 text-left">Email</th>
               <th className="border px-2 py-1 text-left">Logement</th>
@@ -260,6 +260,7 @@ export default function AdminPage() {
               const isBusy = rowLoading === r.id;
               return (
                 <tr key={r.id} className={isBusy ? "opacity-60 pointer-events-none" : ""}>
+                  <td className="border px-2 py-1">{r.humanCode ?? "—"}</td>
                   <td className="border px-2 py-1">{r.name}</td>
                   <td className="border px-2 py-1">{r.email}</td>
                   <td className="border px-2 py-1">{r.lodgingName}</td>
@@ -274,15 +275,11 @@ export default function AdminPage() {
                         : "text-red-600"
                     }`}
                   >
-                    {r.paymentStatus === "paid"
-                      ? "Payé"
-                      : r.paymentStatus === "pending"
-                      ? "En attente de paiement"
-                      : r.paymentStatus}
+                    {r.paymentStatus === "paid" ? "Payé" : r.paymentStatus === "pending" ? "En attente de paiement" : r.paymentStatus}
                   </td>
                   <td className="border px-2 py-1">{formatDate(r.createdAt)}</td>
                   <td className="border px-2 py-1 space-x-2">
-                    {r.paymentStatus !== "paid" && (
+                    {r.paymentStatus !== "paid" ? (
                       <button
                         type="button"
                         className="px-2 py-1 bg-green-600 text-white rounded"
@@ -290,6 +287,15 @@ export default function AdminPage() {
                         disabled={isBusy}
                       >
                         Marquer payé
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="px-2 py-1 bg-amber-600 text-white rounded"
+                        onClick={() => markPending(r.id)}
+                        disabled={isBusy}
+                      >
+                        Remettre en attente
                       </button>
                     )}
                     <button
