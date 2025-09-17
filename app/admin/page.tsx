@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 type Reservation = {
-  id: string;                 // id interne Firestore (caché à l'utilisateur)
-  humanCode?: string | null;  // Référence lisible (JJMMAA-##)
+  id: string;                 // id interne Firestore
+  humanCode?: string | null;  // Réf lisible (JJMMAA-##)
   lodgingName: string | null;
   lodgingId: string;
   qty: number;
@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [stock, setStock] = useState<Stock | null>(null);
   const [loading, setLoading] = useState(true);
   const [rowLoading, setRowLoading] = useState<string | null>(null);
+  const [busyPurge, setBusyPurge] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   // ===== LOADERS =====
@@ -58,7 +59,7 @@ export default function AdminPage() {
     });
   }
 
-  // ===== ACTIONS =====
+  // ===== ACTIONS RESA =====
   async function markPaid(id: string) {
     setRowLoading(id);
     try {
@@ -126,7 +127,7 @@ export default function AdminPage() {
   }
 
   async function resetCounters() {
-    if (!confirm("Remettre tous les compteurs à 0 ?")) return;
+    if (!confirm("Remettre tous les compteurs à 0 (stock) ?")) return;
     const res = await fetch("/api/admin/stock/reset", { method: "POST", cache: "no-store" });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -140,6 +141,54 @@ export default function AdminPage() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
+  }
+
+  // ===== PURGE ANNULÉES =====
+  async function purgeCancelled() {
+    try {
+      setBusyPurge(true);
+
+      // 1) Dry-run (GET) pour afficher combien seront supprimées
+      const dry = await fetch(`/api/admin/reservations/purge-cancelled?olderThanDays=0&limit=0`, {
+        cache: "no-store",
+        headers: { "cache-control": "no-cache" },
+      }).then((r) => r.json());
+
+      const count = Number(dry?.totalMatched ?? dry?.count ?? 0);
+      if (count <= 0) {
+        alert("Aucune réservation annulée à purger.");
+        return;
+      }
+
+      if (
+        !confirm(
+          `Confirmer la purge ?\n${count} réservation(s) annulée(s) seront supprimées définitivement de Firestore.`
+        )
+      ) {
+        return;
+      }
+
+      // 2) Purge réelle (POST)
+      const res = await fetch(`/api/admin/reservations/purge-cancelled`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ olderThanDays: 0, limit: 0 }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(`Erreur purge (${res.status})\n${j?.error || "Inconnue"}`);
+        return;
+      }
+
+      const deleted = Number(j?.totalDeleted ?? j?.deleted ?? 0);
+      alert(`Purge effectuée : ${deleted} réservation(s) supprimée(s).`);
+
+      // 3) Rafraîchir la page admin
+      await fetchReservations();
+    } finally {
+      setBusyPurge(false);
+    }
   }
 
   // ===== INIT + POLLING =====
@@ -219,8 +268,16 @@ export default function AdminPage() {
           <button onClick={exportCSV} className="px-3 py-2 rounded bg-black text-white">
             Exporter CSV
           </button>
-          <button onClick={resetCounters} className="px-3 py-2 rounded bg-gray-700 text-white">
+          <button onClick={resetCounters} className="px-3 py-2 rounded bg-gray-700 text-white" title="Remettre reservedUnits à 0">
             Réinitialiser compteurs
+          </button>
+          <button
+            onClick={purgeCancelled}
+            disabled={busyPurge}
+            className={`px-3 py-2 rounded text-white ${busyPurge ? "bg-red-300" : "bg-red-600 hover:bg-red-700"}`}
+            title="Supprimer définitivement les réservations annulées"
+          >
+            {busyPurge ? "Purge en cours…" : "Purger les annulées"}
           </button>
           <button onClick={logout} className="px-3 py-2 rounded bg-gray-500 text-white">
             Déconnexion
