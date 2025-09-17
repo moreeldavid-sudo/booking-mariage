@@ -24,6 +24,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [rowLoading, setRowLoading] = useState<string | null>(null);
   const [busyPurge, setBusyPurge] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   // ===== LOADERS =====
@@ -59,6 +61,16 @@ export default function AdminPage() {
     });
   }
 
+  async function refreshNow() {
+    try {
+      setIsRefreshing(true);
+      await Promise.all([fetchReservations(), fetchStock()]);
+      setLastRefresh(Date.now());
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   // ===== ACTIONS RESA =====
   async function markPaid(id: string) {
     setRowLoading(id);
@@ -75,7 +87,7 @@ export default function AdminPage() {
         return;
       }
       setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, paymentStatus: "paid" } : r)));
-      await fetchReservations();
+      await refreshNow();
     } finally {
       setRowLoading(null);
     }
@@ -96,7 +108,7 @@ export default function AdminPage() {
         return;
       }
       setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, paymentStatus: "pending" } : r)));
-      await fetchReservations();
+      await refreshNow();
     } finally {
       setRowLoading(null);
     }
@@ -113,12 +125,12 @@ export default function AdminPage() {
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
       });
-      await Promise.all([fetchReservations(), fetchStock()]);
+      await refreshNow();
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
         alert(`Erreur annulation (${res.status})\n${txt}\nLa page a été resynchronisée.`);
       }
-    } catch (e) {
+    } catch {
       setReservations(before); // rollback si réseau HS
       alert("Erreur réseau pendant l’annulation. Réessaie.");
     } finally {
@@ -134,7 +146,7 @@ export default function AdminPage() {
       alert(`Erreur réinitialisation (${res.status})\n${txt}`);
       return;
     }
-    await fetchStock();
+    await refreshNow();
     alert("Compteurs remis à 0.");
   }
 
@@ -148,7 +160,7 @@ export default function AdminPage() {
     try {
       setBusyPurge(true);
 
-      // 1) Dry-run (GET) pour afficher combien seront supprimées
+      // 1) Dry-run
       const dry = await fetch(`/api/admin/reservations/purge-cancelled?olderThanDays=0&limit=0`, {
         cache: "no-store",
         headers: { "cache-control": "no-cache" },
@@ -160,15 +172,11 @@ export default function AdminPage() {
         return;
       }
 
-      if (
-        !confirm(
-          `Confirmer la purge ?\n${count} réservation(s) annulée(s) seront supprimées définitivement de Firestore.`
-        )
-      ) {
+      if (!confirm(`Confirmer la purge ?\n${count} réservation(s) annulée(s) seront supprimées définitivement.`)) {
         return;
       }
 
-      // 2) Purge réelle (POST)
+      // 2) Purge réelle
       const res = await fetch(`/api/admin/reservations/purge-cancelled`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -184,8 +192,7 @@ export default function AdminPage() {
       const deleted = Number(j?.totalDeleted ?? j?.deleted ?? 0);
       alert(`Purge effectuée : ${deleted} réservation(s) supprimée(s).`);
 
-      // 3) Rafraîchir la page admin
-      await fetchReservations();
+      await refreshNow();
     } finally {
       setBusyPurge(false);
     }
@@ -194,12 +201,11 @@ export default function AdminPage() {
   // ===== INIT + POLLING =====
   useEffect(() => {
     (async () => {
-      await Promise.all([fetchReservations(), fetchStock()]);
+      await refreshNow();
       setLoading(false);
     })();
     pollRef.current = setInterval(() => {
-      fetchReservations();
-      fetchStock();
+      refreshNow();
     }, 10000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -254,6 +260,12 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
+  function formatTime(t: number | null) {
+    if (!t) return "—";
+    const d = new Date(t);
+    return d.toLocaleTimeString("fr-CH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
   // ===== RENDER =====
   return (
     <div className="p-6 space-y-6">
@@ -261,7 +273,7 @@ export default function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold">Admin — Réservations</h1>
           <div className="text-sm text-gray-600 mt-1">
-            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée{reservations.length > 1 ? "s" : ""}
+            {reservations.length} réservation{reservations.length > 1 ? "s" : ""} affichée{reservations.length > 1 ? "s" : ""} • Dernière mise à jour : {formatTime(lastRefresh)}
           </div>
         </div>
         <div className="flex gap-2">
@@ -283,11 +295,20 @@ export default function AdminPage() {
             Déconnexion
           </button>
           <button
-            onClick={() => Promise.all([fetchReservations(), fetchStock()])}
-            className="px-3 py-2 rounded bg-gray-200"
+            onClick={refreshNow}
+            disabled={isRefreshing}
+            className={`px-3 py-2 rounded ${isRefreshing ? "bg-gray-300" : "bg-gray-200 hover:bg-gray-300"}`}
             title="Rafraîchir manuellement les données"
           >
-            Rafraîchir
+            <span className="inline-flex items-center gap-2">
+              {isRefreshing && (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.25" />
+                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" fill="none" />
+                </svg>
+              )}
+              {isRefreshing ? "Rafraîchissement…" : "Rafraîchir"}
+            </span>
           </button>
         </div>
       </div>
