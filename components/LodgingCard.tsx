@@ -20,7 +20,7 @@ type Props = {
 
 // === Prix & libellés ===
 const PRICE_PER_TIPI_TOTAL = 200; // CHF pour tout le séjour
-const STAY_LABEL = "pour les 3 nuits (26–28 juin 2026)";
+const STAY_LABEL = "pour 2 nuits (26–28 juin 2026)";
 
 // Taux EUR (modifiable via .env => NEXT_PUBLIC_EUR_RATE)
 const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
@@ -43,7 +43,6 @@ export default function LodgingCard({
   const unitEur = Math.round(unitChf * EUR_RATE);
 
   return (
-    // 👉 Police des cartes en Inter
     <div className="font-[var(--font-inter)] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white flex flex-col">
       {/* Image */}
       <div className="relative h-56 w-full md:h-64">
@@ -98,10 +97,11 @@ export default function LodgingCard({
           </span>
         </div>
 
-        {/* Infos complémentaires */}
-        <div className="mt-1 text-xs md:text-sm text-gray-500 space-y-1">
-          <p>Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.</p>
-          <p>Tarif fixe : identique pour 1, 2 ou 3 nuits.</p>
+        <div className="mt-1 text-xs md:text-sm text-gray-500">
+          Prix identique pour lit 140&nbsp;cm et 2×90&nbsp;cm.
+        </div>
+        <div className="mt-1 text-xs md:text-sm text-gray-500">
+          Le prix est identique que vous restiez 1, 2 ou les 2 nuits complètes.
         </div>
 
         {/* Action */}
