@@ -16,22 +16,25 @@ function cryptoRandom(len = 24) {
   return out;
 }
 
-// Génère le code humain JJMMAA-## avec compteur global 01..40 (cycle)
-async function generateHumanCode(db: FirebaseFirestore.Firestore) {
+/**
+ * Génère une référence lisible du type JJMMAA-##,
+ * avec un compteur qui repart à 01 chaque nouvelle journée.
+ * Stockage: collection "counters" / doc "day-<JJMMAA>" => { value: number }
+ */
+async function generateDailyHumanCode(db: FirebaseFirestore.Firestore) {
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, "0");
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const yy = String(now.getFullYear()).slice(-2);
   const dayPart = `${dd}${mm}${yy}`;
 
-  const counterRef = db.collection("counters").doc("global");
+  const counterRef = db.collection("counters").doc(`day-${dayPart}`);
   let counterVal = 0;
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(counterRef);
     const current = Number(snap.exists ? (snap.data() as any)?.value ?? 0 : 0);
-    // fait avancer le compteur, boucle après 40 → 01
-    const next = ((current % 40) + 1);
+    const next = current + 1; // repart à 1 chaque jour (on ne boucle pas ici)
     tx.set(counterRef, { value: next, updatedAt: new Date() }, { merge: true });
     counterVal = next;
   });
@@ -81,8 +84,8 @@ export async function POST(req: NextRequest) {
       tx.update(lodgingRef, { reservedUnits: afterReserved });
     });
 
-    // Génération de la référence lisible
-    const humanCode = await generateHumanCode(db);
+    // Référence lisible JOURNALIÈRE
+    const humanCode = await generateDailyHumanCode(db);
 
     // Création réservation
     const unitPriceCHF = PRICE_PER_TIPI_TOTAL;
@@ -102,7 +105,7 @@ export async function POST(req: NextRequest) {
       stayLabel: STAY_LABEL,
       status: "confirmed",
       paymentStatus: "pending",
-      humanCode,           // ← NEW
+      humanCode, // ← JJMMAA-##
       cancelToken,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -132,10 +135,10 @@ export async function POST(req: NextRequest) {
       lodging_name: lodgingData?.title ?? lodgingId,
       quantity: String(qty),
       total_chf: String(totalCHF),
-      reservation_code: humanCode,     // ← NEW : pour tes templates
-      // on n’envoie plus reservation_id dans l’objet, mais on peut le garder dans les params si tu veux
-      reservation_id: reservationId,
+      reservation_code: humanCode, // ← utiliser dans EmailJS: {{reservation_code}}
+      reservation_id: reservationId, // interne, utile en debug
       cancel_url: cancelUrl,
+      summary_line: `Réf ${humanCode} — ${qty} ${qty > 1 ? "tipis" : "tipi"} — Total ${totalCHF} CHF`,
     };
 
     // Client
@@ -146,8 +149,6 @@ export async function POST(req: NextRequest) {
       template_params: {
         ...baseParams,
         to_email: email,
-        // Sujet / ligne de résumé avec le code lisible
-        summary_line: `Votre réservation — Réf ${humanCode}`,
       },
     };
 
@@ -160,7 +161,6 @@ export async function POST(req: NextRequest) {
           template_params: {
             ...baseParams,
             to_email: admin_email,
-            summary_line: `Nouvelle réservation ${humanCode} — ${lodgingData?.title ?? lodgingId} — ${qty} ${(qty > 1) ? "tipis" : "tipi"} — ${totalCHF} CHF`,
           },
         }
       : null;
@@ -183,9 +183,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      // on renvoie aussi le code lisible
-      reservationCode: humanCode,
-      reservationId, // (interne, peut servir à debugger)
+      reservationCode: humanCode, // renvoyé au front
+      reservationId,             // interne
       totalChf: totalCHF,
       reservedUnits: afterReserved,
       cancelUrl,
