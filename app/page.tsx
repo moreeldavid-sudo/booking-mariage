@@ -13,8 +13,8 @@ export default function Page() {
       {/* En-tête */}
       <section className="px-4 pt-10 pb-6">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="font-[var(--font-playfair)] text-5xl text-center mb-2 text-[#d4af37]">
-  Réservation hébergements tente
+          <h1 className="text-5xl font-bold text-center text-yellow-700 mb-6">
+  Réservation des hébergements en tentes
 </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-700">
