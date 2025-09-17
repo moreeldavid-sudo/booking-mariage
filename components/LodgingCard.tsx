@@ -25,6 +25,10 @@ const STAY_LABEL = "pour les 3 nuits (26–28 juin 2026)";
 // Taux EUR indicatif (peut être ajusté côté .env si tu veux)
 const EUR_RATE = Number(process.env.NEXT_PUBLIC_EUR_RATE ?? 1.075);
 
+// Formatters pour un affichage propre
+const fmtCHF = new Intl.NumberFormat("fr-CH");
+const fmtEUR = new Intl.NumberFormat("fr-FR");
+
 export default function LodgingCard({
   lodging,
   onReserve,
@@ -85,8 +89,11 @@ export default function LodgingCard({
         {/* Prix (badge arrondi, CHF + EUR) */}
         <div className="mt-1">
           <span className="inline-flex items-center gap-3 text-sm md:text-base">
-            <span className="px-4 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold">
-              {unitChf} CHF / {unitEur} €
+            <span className="px-4 py-1 rounded-full bg-gray-100 text-gray-900 font-semibold inline-flex items-center gap-1 whitespace-nowrap leading-none">
+              {/* espaces insécables pour bloquer les sauts indésirables */}
+              <span>{fmtCHF.format(unitChf)}{"\u00A0"}CHF</span>
+              <span>/</span>
+              <span>{fmtEUR.format(unitEur)}{"\u00A0"}€</span>
             </span>
             <span className="text-gray-600">par tipi {STAY_LABEL}</span>
           </span>
